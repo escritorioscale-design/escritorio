@@ -13,24 +13,9 @@ import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
 import { InviteModal } from "@/components/invite-modal";
-import { OfficeScene } from "@/components/office-scene";
+import { OfficeGame, type LocalMoveState } from "@/components/office-game";
 import { signOut } from "@/lib/auth-client";
-import {
-  clampPoint,
-  corridorY,
-  directionFromVector,
-  doorApproach,
-  doorX,
-  getObstacles,
-  getSeats,
-  isInsideRoom,
-  nearestOpenPosition,
-  openDoorsForPosition,
-  resolveMovement,
-  type Obstacle,
-  type Point,
-  type Seat,
-} from "@/lib/office-layout";
+import { MAP_COLS, MAP_ROWS, ROOMS as TILE_ROOMS, type TileRoom } from "@/lib/office-map";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -60,6 +45,7 @@ type Presence = {
   seatId?: string | null;
 };
 type MediaGrant = { token: string; serverUrl: string };
+type Point = { x: number; y: number };
 
 type Props = {
   user: { id: string; name: string; email: string; avatar: AvatarAppearance };
@@ -71,19 +57,19 @@ type Props = {
 
 type OfficeTheme = "day" | "neon" | "studio";
 
-function roomIcon(room: RoomData) {
+function roomIcon(room: TileRoom) {
   if (room.kind === "MEETING") return <Video />;
   if (room.kind === "PROXIMITY") return <Lock />;
   if (room.kind === "SOCIAL") return <Sparkles />;
   return <Headphones />;
 }
 
-const movementKeys: Record<string, Point> = {
-  arrowup: { x: 0, y: -1 }, w: { x: 0, y: -1 },
-  arrowdown: { x: 0, y: 1 }, s: { x: 0, y: 1 },
-  arrowleft: { x: -1, y: 0 }, a: { x: -1, y: 0 },
-  arrowright: { x: 1, y: 0 }, d: { x: 1, y: 0 },
-};
+function roomLabel(room: TileRoom) {
+  if (room.kind === "FOCUS" || room.kind === "SOCIAL") return "4 posições de trabalho";
+  if (room.kind === "MEETING") return "Até 24 participantes";
+  return "Sala reservada";
+}
+
 const bodyTypeLabels: Record<AvatarAppearance["bodyType"], string> = {
   male: "Masculino", female: "Feminino",
 };
@@ -128,10 +114,7 @@ function AvatarSwatches({ values, value, onChange, label }: {
 }
 
 export function WorkspaceShell({ user, organization, workspace, space, rooms }: Props) {
-  const obstacles = useMemo(() => getObstacles(rooms), [rooms]);
-  const seats = useMemo(() => getSeats(rooms), [rooms]);
-  const initialPosition = useMemo(() => nearestOpenPosition({ x: 49, y: 52 }, obstacles), [obstacles]);
-  const [position, setPosition] = useState(initialPosition);
+  const [position, setPosition] = useState({ x: 49, y: 50 });
   const [direction, setDirection] = useState<AvatarDirection>("down");
   const [moving, setMoving] = useState(false);
   const [sitting, setSitting] = useState(false);
@@ -147,34 +130,29 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   const [officeEditorOpen, setOfficeEditorOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [officeTheme, setOfficeTheme] = useState<OfficeTheme>("day");
-  const [decorationsVisible, setDecorationsVisible] = useState(true);
   const socketRef = useRef<Socket | null>(null);
-  const positionRef = useRef(initialPosition);
+  const positionRef = useRef(position);
   const directionRef = useRef<AvatarDirection>("down");
   const movingRef = useRef(false);
   const sittingRef = useRef(false);
   const seatIdRef = useRef<string | null>(null);
-  const peopleRef = useRef<Record<string, Presence>>({});
-  const pressedKeysRef = useRef(new Set<string>());
-  const pathRef = useRef<Point[]>([]);
-  const stuckTicksRef = useRef(0);
   const lastEmitRef = useRef(0);
 
-  useEffect(() => {
-    peopleRef.current = people;
-  }, [people]);
+  const occupiedSeatIds = useMemo(
+    () => new Set(Object.values(people).map((person) => person.seatId).filter((id): id is string => Boolean(id))),
+    [people],
+  );
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("orbit-office-preferences") ?? "null") as { theme?: OfficeTheme; decorations?: boolean } | null;
+      const saved = JSON.parse(localStorage.getItem("orbit-office-preferences") ?? "null") as { theme?: OfficeTheme } | null;
       if (saved?.theme === "day" || saved?.theme === "neon" || saved?.theme === "studio") setOfficeTheme(saved.theme);
-      if (typeof saved?.decorations === "boolean") setDecorationsVisible(saved.decorations);
     } catch { /* use the default office look */ }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("orbit-office-preferences", JSON.stringify({ theme: officeTheme, decorations: decorationsVisible }));
-  }, [officeTheme, decorationsVisible]);
+    localStorage.setItem("orbit-office-preferences", JSON.stringify({ theme: officeTheme }));
+  }, [officeTheme]);
 
   const emitMovement = useCallback((next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false, nextSitting = sittingRef.current, nextSeatId = seatIdRef.current) => {
     const now = performance.now();
@@ -229,186 +207,31 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
     return () => { cancelled = true; socket?.disconnect(); };
   }, [user.id, workspace.id]);
 
-  useEffect(() => {
-    if (editorOpen || officeEditorOpen) {
-      pressedKeysRef.current.clear();
-      pathRef.current = [];
-      return;
+  const handleLocalUpdate = useCallback((state: LocalMoveState) => {
+    const next = { x: state.xPercent, y: state.yPercent };
+    positionRef.current = next;
+    setPosition(next);
+    if (state.direction !== directionRef.current) {
+      directionRef.current = state.direction;
+      setDirection(state.direction);
     }
-
-    let frame = 0;
-    let previous = performance.now();
-    const setPressed = (event: KeyboardEvent, pressed: boolean) => {
-      const key = event.key.toLowerCase();
-      if (!movementKeys[key] || (event.target as HTMLElement).matches("input, textarea, button")) return;
-      event.preventDefault();
-      if (pressed) {
-        if (sittingRef.current) {
-          sittingRef.current = false;
-          setSitting(false);
-          seatIdRef.current = null;
-          emitMovement(positionRef.current, directionRef.current, false, true, false, null);
-        }
-        pressedKeysRef.current.add(key);
-        pathRef.current = [];
-      } else {
-        pressedKeysRef.current.delete(key);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => setPressed(event, true);
-    const onKeyUp = (event: KeyboardEvent) => setPressed(event, false);
-    const onBlur = () => pressedKeysRef.current.clear();
-
-    function tick(now: number) {
-      const elapsed = Math.min((now - previous) / 1000, .04);
-      previous = now;
-      let vector = { x: 0, y: 0 };
-      for (const key of pressedKeysRef.current) {
-        const delta = movementKeys[key];
-        if (delta) vector = { x: vector.x + delta.x, y: vector.y + delta.y };
-      }
-
-      if (!vector.x && !vector.y && pathRef.current.length) {
-        const target = pathRef.current[0];
-        vector = { x: target.x - positionRef.current.x, y: target.y - positionRef.current.y };
-        if (Math.hypot(vector.x, vector.y) < .35) {
-          pathRef.current = pathRef.current.slice(1);
-          const next = pathRef.current[0];
-          vector = next ? { x: next.x - positionRef.current.x, y: next.y - positionRef.current.y } : { x: 0, y: 0 };
-        }
-      }
-
-      const magnitude = Math.hypot(vector.x, vector.y);
-      let isMoving = false;
-      if (magnitude > .001) {
-        if (sittingRef.current) {
-          sittingRef.current = false;
-          setSitting(false);
-          seatIdRef.current = null;
-        }
-        const speed = 15.5;
-        const step = Math.min(speed * elapsed, magnitude);
-        const tickObstacles = getObstacles(rooms, openDoorsForPosition(positionRef.current, rooms));
-        let attempt = { x: vector.x / magnitude * step, y: vector.y / magnitude * step };
-        if (pathRef.current.length && stuckTicksRef.current > 12) {
-          // Straight-line steering can't get around a rectangle sitting between
-          // us and the target (e.g. a desk in front of its own chair) — nudge
-          // sideways, alternating sides, until we clear it and can head
-          // straight at the target again.
-          const perpendicular = { x: -vector.y / magnitude, y: vector.x / magnitude };
-          const side = Math.floor(stuckTicksRef.current / 12) % 2 === 0 ? 1 : -1;
-          attempt = { x: attempt.x + perpendicular.x * side * step, y: attempt.y + perpendicular.y * side * step };
-        }
-        const next = resolveMovement(positionRef.current, attempt, tickObstacles);
-        const nextDirection = directionFromVector(vector.x, vector.y, directionRef.current);
-        if (nextDirection !== directionRef.current) {
-          directionRef.current = nextDirection;
-          setDirection(nextDirection);
-        }
-        const distanceMoved = Math.hypot(next.x - positionRef.current.x, next.y - positionRef.current.y);
-        if (distanceMoved > .001) {
-          positionRef.current = next;
-          setPosition(next);
-          isMoving = true;
-          emitMovement(next, nextDirection, true);
-        }
-        // A sliver of progress (sliding along a wall while a door is still
-        // shut, or nudging past a corner) still counts as "stuck" for path
-        // steering — only a real step resets the counter, otherwise a
-        // desk-in-front-of-its-chair situation would silently reset it every
-        // tick and the sidestep above would never kick in.
-        if (distanceMoved > step * .2) {
-          stuckTicksRef.current = 0;
-        } else if (pathRef.current.length) {
-          // Only give up once we've made no real progress for a while.
-          stuckTicksRef.current += 1;
-          if (stuckTicksRef.current > 150) {
-            pathRef.current = [];
-            stuckTicksRef.current = 0;
-          }
-        }
-      }
-
-      if (!isMoving && !pathRef.current.length && pressedKeysRef.current.size === 0 && !sittingRef.current) {
-        const occupiedSeatIds = new Set(Object.values(peopleRef.current).map((person) => person.seatId).filter(Boolean));
-        const nearestSeat = seats
-          .filter((seat) => !occupiedSeatIds.has(seat.id))
-          .map((seat) => ({ seat, distance: Math.hypot(seat.x - positionRef.current.x, seat.y - positionRef.current.y) }))
-          .filter(({ distance }) => distance <= 3.2)
-          .sort((a, b) => a.distance - b.distance)[0]?.seat;
-        if (nearestSeat) {
-          positionRef.current = { x: nearestSeat.x, y: nearestSeat.y };
-          setPosition(positionRef.current);
-          directionRef.current = nearestSeat.direction;
-          setDirection(nearestSeat.direction);
-          sittingRef.current = true;
-          setSitting(true);
-          seatIdRef.current = nearestSeat.id;
-          emitMovement(positionRef.current, nearestSeat.direction, false, true, true, nearestSeat.id);
-        }
-      }
-
-      if (isMoving !== movingRef.current) {
-        movingRef.current = isMoving;
-        setMoving(isMoving);
-        emitMovement(positionRef.current, directionRef.current, isMoving, true);
-      }
-      frame = requestAnimationFrame(tick);
+    if (state.moving !== movingRef.current) {
+      movingRef.current = state.moving;
+      setMoving(state.moving);
     }
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
-    frame = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, [editorOpen, emitMovement, obstacles, officeEditorOpen, rooms, seats]);
+    if (state.sitting !== sittingRef.current) {
+      sittingRef.current = state.sitting;
+      setSitting(state.sitting);
+    }
+    seatIdRef.current = state.seatId;
+    emitMovement(next, state.direction, state.moving, false, state.sitting, state.seatId);
+  }, [emitMovement]);
 
   const nearby = useMemo(
     () => Object.values(people).filter((person) => Math.hypot(person.x - position.x, person.y - position.y) < 14),
     [people, position],
   );
   const meetingRoom = rooms.find((room) => room.kind === "MEETING") ?? rooms[0];
-
-  function walkTo(x: number, y: number) {
-    if (sittingRef.current) {
-      sittingRef.current = false;
-      setSitting(false);
-      seatIdRef.current = null;
-    }
-    stuckTicksRef.current = 0;
-    const requested = clampPoint({ x, y });
-    const currentRoom = rooms.find((room) => isInsideRoom(positionRef.current, room));
-    const entryRoom = rooms.find((room) => isInsideRoom(requested, room));
-    const path: Point[] = [];
-    // Leaving one room and/or entering another: step out through the current
-    // room's own door into the shared corridor, slide along the corridor to
-    // line up with the target room's door, then step in — rather than a
-    // diagonal shortcut that can clip a neighboring room's wall corner.
-    if (currentRoom && currentRoom.id !== entryRoom?.id) {
-      const y = corridorY(rooms);
-      path.push({ x: doorX(currentRoom), y });
-      if (entryRoom) path.push({ x: doorX(entryRoom), y });
-    }
-    if (entryRoom && entryRoom.id !== currentRoom?.id) {
-      path.push(doorApproach(entryRoom));
-      // Focus/social rooms have their desks in two side columns with a clear
-      // aisle straight down the middle. Go down that aisle to the target's
-      // own row before turning to approach it, instead of cutting diagonally
-      // across a desk that sits between the door and a chair behind it.
-      if (entryRoom.kind === "FOCUS" || entryRoom.kind === "SOCIAL") {
-        path.push({ x: doorX(entryRoom), y: requested.y });
-      }
-    }
-    path.push(requested);
-    pathRef.current = path;
-  }
-
-  const openDoorIds = useMemo(() => [...openDoorsForPosition(position, rooms)], [position, rooms]);
 
   function openAvatarEditor() {
     setDraftAvatar(avatar);
@@ -492,57 +315,59 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
         </header>
 
         <div className="office-content">
-          <section className={`map-stage office-theme-${officeTheme}`} onClick={(event) => {
-            const target = event.target as HTMLElement;
-            if (target.closest("button")) return;
-            const rect = event.currentTarget.getBoundingClientRect();
-            walkTo(((event.clientX - rect.left) / rect.width) * 100, ((event.clientY - rect.top) / rect.height) * 100);
-          }}>
-            <div className="map-dots" />
-            {decorationsVisible && <>
-              <div className="map-decor decor-window decor-window-a" aria-hidden="true" />
-              <div className="map-decor decor-window decor-window-b" aria-hidden="true" />
-              <div className="map-decor decor-printer" aria-hidden="true" />
-              <div className="map-decor decor-coffee" aria-hidden="true" />
-            </>}
-            <OfficeScene rooms={rooms} theme={officeTheme} openDoorIds={openDoorIds} />
-            {rooms.map((room) => (
-              <div
-                key={`title-${room.id}`}
-                className="map-room-title"
-                style={{ left: `calc(${room.x}% + 12px)`, top: `calc(${room.y}% + 10px)`, pointerEvents: "none" }}
-              >
-                <span className="office-room-icon">{roomIcon(room)}</span>
-                <div>
-                  <strong>{room.name}</strong>
-                  <small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small>
-                </div>
-              </div>
-            ))}
-            {rooms.filter((room) => room.kind === "MEETING").map((room) => (
-              <button key={`meeting-${room.id}`} className="map-meeting-hit" style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%` }} onClick={() => joinCall(room)} aria-label="Entrar na sala de reunião" />
-            ))}
-
-            {Object.values(people).map((person) => (
-              <div
-                className="map-character remote-character"
-                key={person.userId}
-                style={{ left: `${person.x}%`, top: `${person.y}%`, zIndex: Math.round(20 + person.y) }}
-                aria-label={person.name}
-              >
-                <AvatarCharacter appearance={normalizeAvatar(person.avatar)} direction={person.direction} moving={person.moving} sitting={person.sitting} />
-                <label>{person.name}</label>
-              </div>
-            ))}
-            <div className="proximity-zone" style={{ left: `${position.x}%`, top: `${position.y}%` }} />
-            <div
-              className="map-character self-character"
-              style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
-              aria-label="Seu personagem"
+          <section className={`map-stage office-theme-${officeTheme}`}>
+            <OfficeGame
+              theme={officeTheme}
+              occupiedSeatIds={occupiedSeatIds}
+              onUpdate={handleLocalUpdate}
+              active={!editorOpen && !officeEditorOpen}
             >
-              <AvatarCharacter appearance={avatar} direction={direction} moving={moving} sitting={sitting} />
-              <label>Você</label>
-            </div>
+              {TILE_ROOMS.map((room) => (
+                <div
+                  key={`title-${room.id}`}
+                  className="map-room-title"
+                  style={{ left: `calc(${(room.x / MAP_COLS) * 100}% + 12px)`, top: `calc(${(room.y / MAP_ROWS) * 100}% + 10px)` }}
+                >
+                  <span className="office-room-icon">{roomIcon(room)}</span>
+                  <div>
+                    <strong>{room.name}</strong>
+                    <small>{roomLabel(room)}</small>
+                  </div>
+                </div>
+              ))}
+              {TILE_ROOMS.filter((room) => room.kind === "MEETING").map((room) => (
+                <button
+                  key={`meeting-${room.id}`}
+                  className="map-meeting-hit"
+                  style={{
+                    left: `${(room.x / MAP_COLS) * 100}%`, top: `${(room.y / MAP_ROWS) * 100}%`,
+                    width: `${(room.w / MAP_COLS) * 100}%`, height: `${(room.h / MAP_ROWS) * 100}%`,
+                  }}
+                  onClick={() => joinCall(meetingRoom)}
+                  aria-label="Entrar na sala de reunião"
+                />
+              ))}
+              {Object.values(people).map((person) => (
+                <div
+                  className="map-character remote-character"
+                  key={person.userId}
+                  style={{ left: `${person.x}%`, top: `${person.y}%`, zIndex: Math.round(20 + person.y) }}
+                  aria-label={person.name}
+                >
+                  <AvatarCharacter appearance={normalizeAvatar(person.avatar)} direction={person.direction} moving={person.moving} sitting={person.sitting} />
+                  <label>{person.name}</label>
+                </div>
+              ))}
+              <div className="proximity-zone" style={{ left: `${position.x}%`, top: `${position.y}%` }} />
+              <div
+                className="map-character self-character"
+                style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
+                aria-label="Seu personagem"
+              >
+                <AvatarCharacter appearance={avatar} direction={direction} moving={moving} sitting={sitting} />
+                <label>Você</label>
+              </div>
+            </OfficeGame>
             <div className="movement-help"><span>WASD</span><span>↑ ↓ ← →</span><b>ou clique para andar</b></div>
             <div className={`connection-pill ${connection}`}>
               {connection === "online" ? "Tempo real conectado" : connection === "connecting" ? "Conectando…" : "Modo offline"}
@@ -608,13 +433,12 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
       {officeEditorOpen && (
         <div className="office-customizer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOfficeEditorOpen(false); }}>
           <section className="office-customizer" role="dialog" aria-modal="true" aria-labelledby="office-customizer-title">
-            <header><div><span>PERSONALIZAR ESCRITÓRIO</span><h2 id="office-customizer-title">Dê identidade ao seu espaço</h2><p>Escolha o clima visual e os detalhes do escritório. A preferência fica salva neste dispositivo.</p></div><button onClick={() => setOfficeEditorOpen(false)} aria-label="Fechar"><X /></button></header>
+            <header><div><span>PERSONALIZAR ESCRITÓRIO</span><h2 id="office-customizer-title">Dê identidade ao seu espaço</h2><p>Escolha o clima visual do escritório. A preferência fica salva neste dispositivo.</p></div><button onClick={() => setOfficeEditorOpen(false)} aria-label="Fechar"><X /></button></header>
             <div className="office-theme-grid">
               <button className={officeTheme === "day" ? "selected" : ""} onClick={() => setOfficeTheme("day")}><i className="theme-preview theme-preview-day" /><strong>Estúdio claro</strong><small>madeira e luz natural</small></button>
               <button className={officeTheme === "neon" ? "selected" : ""} onClick={() => setOfficeTheme("neon")}><i className="theme-preview theme-preview-neon" /><strong>Neon noturno</strong><small>energia de coworking</small></button>
               <button className={officeTheme === "studio" ? "selected" : ""} onClick={() => setOfficeTheme("studio")}><i className="theme-preview theme-preview-studio" /><strong>Estúdio criativo</strong><small>cores de design</small></button>
             </div>
-            <button className={`decor-toggle ${decorationsVisible ? "selected" : ""}`} onClick={() => setDecorationsVisible((visible) => !visible)}><span className="decor-toggle-icon">✦</span><span><strong>Detalhes do escritório</strong><small>Janelas, impressora e café na área comum</small></span><b>{decorationsVisible ? "Visíveis" : "Ocultos"}</b></button>
           </section>
         </div>
       )}
