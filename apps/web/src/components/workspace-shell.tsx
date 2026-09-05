@@ -50,6 +50,8 @@ type Props = {
   rooms: RoomData[];
 };
 
+type OfficeTheme = "day" | "neon" | "studio";
+
 const palette: Record<string, string> = {
   SOCIAL: "#f4e0c9", FOCUS: "#dfe7df", MEETING: "#ddd8f2", PROXIMITY: "#dceacb",
 };
@@ -80,6 +82,14 @@ function getObstacles(rooms: RoomData[]): Obstacle[] {
     }
     if (room.kind === "PROXIMITY") {
       return [{ x: room.x + room.width * .12, y: room.y + room.height * .29, width: room.width * .62, height: room.height * .52 }];
+    }
+    if (room.kind === "SOCIAL" && room.name.toLowerCase().includes("cria")) {
+      return Array.from({ length: 4 }, (_, index) => ({
+        x: room.x + room.width * (.12 + (index % 2) * .48),
+        y: room.y + room.height * (.34 + Math.floor(index / 2) * .34),
+        width: room.width * .3,
+        height: room.height * .14,
+      }));
     }
     if (room.kind === "SOCIAL") {
       return [
@@ -181,6 +191,9 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   const [editorOpen, setEditorOpen] = useState(false);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
+  const [officeEditorOpen, setOfficeEditorOpen] = useState(false);
+  const [officeTheme, setOfficeTheme] = useState<OfficeTheme>("day");
+  const [decorationsVisible, setDecorationsVisible] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const positionRef = useRef(initialPosition);
   const directionRef = useRef<AvatarDirection>("down");
@@ -188,6 +201,18 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   const pressedKeysRef = useRef(new Set<string>());
   const targetRef = useRef<Point | null>(null);
   const lastEmitRef = useRef(0);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("orbit-office-preferences") ?? "null") as { theme?: OfficeTheme; decorations?: boolean } | null;
+      if (saved?.theme === "day" || saved?.theme === "neon" || saved?.theme === "studio") setOfficeTheme(saved.theme);
+      if (typeof saved?.decorations === "boolean") setDecorationsVisible(saved.decorations);
+    } catch { /* use the default office look */ }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("orbit-office-preferences", JSON.stringify({ theme: officeTheme, decorations: decorationsVisible }));
+  }, [officeTheme, decorationsVisible]);
 
   const emitMovement = useCallback((next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false) => {
     const now = performance.now();
@@ -408,6 +433,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             <button aria-label="Buscar"><Search /></button>
             <button aria-label="Notificações"><Bell /></button>
             <div className="online-count"><span>{Object.keys(people).length + 1}</span> online</div>
+            <button className="customize office-customize" onClick={() => setOfficeEditorOpen(true)}><Settings /> Escritório</button>
             <button className="customize" onClick={openAvatarEditor}><Palette /> Personagem</button>
             <button className="invite"><Plus /> Convidar</button>
             <button aria-label="Sair" onClick={() => signOut({ fetchOptions: { onSuccess: () => location.assign("/login") } })}><LogOut /></button>
@@ -415,13 +441,19 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
         </header>
 
         <div className="office-content">
-          <section className="map-stage" onClick={(event) => {
+          <section className={`map-stage office-theme-${officeTheme}`} onClick={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest("button")) return;
             const rect = event.currentTarget.getBoundingClientRect();
             walkTo(((event.clientX - rect.left) / rect.width) * 100, ((event.clientY - rect.top) / rect.height) * 100);
           }}>
             <div className="map-dots" />
+            {decorationsVisible && <>
+              <div className="map-decor decor-window decor-window-a" aria-hidden="true" />
+              <div className="map-decor decor-window decor-window-b" aria-hidden="true" />
+              <div className="map-decor decor-printer" aria-hidden="true" />
+              <div className="map-decor decor-coffee" aria-hidden="true" />
+            </>}
             {rooms.map((room) => (
               <div
                 key={room.id}
@@ -429,7 +461,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%`, background: palette[room.kind] }}
               >
                 <span className="map-room-title">{room.name}</span>
-                {room.kind === "SOCIAL" && (room.name.toLowerCase().includes("cria") ? <div className="room-art creative-art"><i /><i /><b /></div> : <div className="room-art social-art"><i /><i /><i /></div>)}
+                {room.kind === "SOCIAL" && (room.name.toLowerCase().includes("cria") ? <div className="room-art creative-team-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}<strong /></div> : <div className="room-art social-art"><i /><i /><i /></div>)}
                 {room.kind === "FOCUS" && <div className="room-art squad-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}</div>}
                 {room.kind === "MEETING" && <button className="room-art meeting-art" onClick={(event) => { event.stopPropagation(); joinCall(room); }}><span /><em><Video /> Entrar</em></button>}
                 {room.kind === "PROXIMITY" && (room.name.toLowerCase().includes("gerente") ? <div className="room-art manager-art"><i /><b /></div> : <div className="room-art garden-art"><i>✦</i><i>✿</i><i>✦</i></div>)}
@@ -513,6 +545,20 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             </div>
             {avatarError && <p className="avatar-save-error">{avatarError}</p>}
             <footer><button className="avatar-cancel" onClick={() => setEditorOpen(false)}>Cancelar</button><button className="avatar-save" onClick={saveAvatar} disabled={avatarSaving}>{avatarSaving ? "Salvando…" : <><Check /> Salvar personagem</>}</button></footer>
+          </section>
+        </div>
+      )}
+
+      {officeEditorOpen && (
+        <div className="office-customizer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOfficeEditorOpen(false); }}>
+          <section className="office-customizer" role="dialog" aria-modal="true" aria-labelledby="office-customizer-title">
+            <header><div><span>PERSONALIZAR ESCRITÓRIO</span><h2 id="office-customizer-title">Dê identidade ao seu espaço</h2><p>Escolha o clima visual e os detalhes do escritório. A preferência fica salva neste dispositivo.</p></div><button onClick={() => setOfficeEditorOpen(false)} aria-label="Fechar"><X /></button></header>
+            <div className="office-theme-grid">
+              <button className={officeTheme === "day" ? "selected" : ""} onClick={() => setOfficeTheme("day")}><i className="theme-preview theme-preview-day" /><strong>Estúdio claro</strong><small>madeira e luz natural</small></button>
+              <button className={officeTheme === "neon" ? "selected" : ""} onClick={() => setOfficeTheme("neon")}><i className="theme-preview theme-preview-neon" /><strong>Neon noturno</strong><small>energia de coworking</small></button>
+              <button className={officeTheme === "studio" ? "selected" : ""} onClick={() => setOfficeTheme("studio")}><i className="theme-preview theme-preview-studio" /><strong>Estúdio criativo</strong><small>cores de design</small></button>
+            </div>
+            <button className={`decor-toggle ${decorationsVisible ? "selected" : ""}`} onClick={() => setDecorationsVisible((visible) => !visible)}><span className="decor-toggle-icon">✦</span><span><strong>Detalhes do escritório</strong><small>Janelas, impressora e café na área comum</small></span><b>{decorationsVisible ? "Visíveis" : "Ocultos"}</b></button>
           </section>
         </div>
       )}
