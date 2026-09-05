@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./avatar-world.css";
+import "./office-editor.css";
 import "@livekit/components-styles";
 
 export const metadata: Metadata = {

@@ -6,6 +6,7 @@ import { WorkspaceShell } from "@/components/workspace-shell";
 import { auth } from "@/lib/auth";
 import { isPlatformAdmin } from "@/lib/admin";
 import { normalizeAvatar } from "@/lib/avatar";
+import { isOfficeLayout } from "@/lib/office-layout";
 import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +94,7 @@ export default async function WorkspacePage() {
     space.rooms.map((room) => ({ id: room.id, name: room.name, kind: room.kind, x: room.x, y: room.y, width: room.width, height: room.height, capacity: room.capacity })),
     space.id,
   );
+  const officeLayout = isOfficeLayout(space.mapData) ? space.mapData : undefined;
 
   return (
     <WorkspaceShell
@@ -106,6 +108,7 @@ export default async function WorkspacePage() {
       workspace={{ id: workspace.id, name: workspace.name }}
       space={{ id: space.id, name: space.name }}
       rooms={officeRooms}
+      officeLayout={officeLayout}
     />
   );
 }

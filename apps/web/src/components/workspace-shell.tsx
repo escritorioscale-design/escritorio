@@ -6,18 +6,19 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, CalendarDays, Check, ChevronDown, Grid2X2, LogOut, MessageSquare,
+  Bell, CalendarDays, Check, ChevronDown, Grid2X2, LayoutGrid, LogOut, MessageSquare,
   Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
 import { InviteModal } from "@/components/invite-modal";
-import { ModernOfficePreview, type LocalMoveState } from "@/components/modern-office-preview";
+import { OfficeBuilder, type LocalMoveState } from "@/components/office-builder";
+import { OfficeEditor } from "@/components/office-editor";
 import { ProximityVoice, PROXIMITY_SILENT_TILES, tileDistance } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
-import { MAP_COLS, MAP_ROWS } from "@/lib/modern-office-map";
+import { DEFAULT_OFFICE_LAYOUT, type OfficeLayout } from "@/lib/office-layout";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -55,6 +56,7 @@ type Props = {
   workspace: { id: string; name: string };
   space: { id: string; name: string };
   rooms: RoomData[];
+  officeLayout?: OfficeLayout;
 };
 
 type OfficeTheme = "day" | "neon" | "studio";
@@ -102,7 +104,10 @@ function AvatarSwatches({ values, value, onChange, label }: {
   );
 }
 
-export function WorkspaceShell({ user, organization, workspace, space, rooms }: Props) {
+export function WorkspaceShell({ user, organization, workspace, space, rooms, officeLayout }: Props) {
+  const [layout, setLayout] = useState<OfficeLayout>(() => officeLayout ?? DEFAULT_OFFICE_LAYOUT);
+  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
+  const canEditLayout = organization.role === "owner" || organization.role === "admin";
   const [position, setPosition] = useState({ x: 49, y: 50 });
   const [direction, setDirection] = useState<AvatarDirection>("down");
   const [moving, setMoving] = useState(false);
@@ -322,6 +327,9 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             <button aria-label="Notificações"><Bell /></button>
             <div className="online-count"><span>{Object.keys(people).length + 1}</span> online</div>
             <button className="customize office-customize" onClick={() => setOfficeEditorOpen(true)}><Settings /> Escritório</button>
+            {canEditLayout && (
+              <button className="customize" onClick={() => setLayoutEditorOpen(true)}><LayoutGrid /> Editar layout</button>
+            )}
             <button className="customize" onClick={openAvatarEditor}><Palette /> Personagem</button>
             {(organization.role === "owner" || organization.role === "admin") && (
               <button className="invite" onClick={() => setInviteOpen(true)}><Plus /> Convidar</button>
@@ -332,11 +340,12 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
 
         <div className="office-content">
           <section className={`map-stage office-theme-${officeTheme}`}>
-            <ModernOfficePreview
+            <OfficeBuilder
+              layout={layout}
               theme={officeTheme}
               occupiedSeatIds={occupiedSeatIds}
               onUpdate={handleLocalUpdate}
-              active={!editorOpen && !officeEditorOpen}
+              active={!editorOpen && !officeEditorOpen && !layoutEditorOpen}
             >
               {Object.values(people).map((person) => (
                 <div
@@ -353,8 +362,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 className="proximity-zone"
                 style={{
                   left: `${position.x}%`, top: `${position.y}%`,
-                  width: `${((PROXIMITY_SILENT_TILES * 2) / MAP_COLS) * 100}%`,
-                  height: `${((PROXIMITY_SILENT_TILES * 2) / MAP_ROWS) * 100}%`,
+                  width: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapCols) * 100}%`,
+                  height: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapRows) * 100}%`,
                 }}
               />
               <div
@@ -365,7 +374,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 <AvatarCharacter appearance={avatar} direction={direction} moving={moving} sitting={sitting} />
                 <label>Você</label>
               </div>
-            </ModernOfficePreview>
+            </OfficeBuilder>
             <div className="movement-help"><span>WASD</span><span>↑ ↓ ← →</span><b>ou clique para andar</b></div>
             <div className={`connection-pill ${connection}`}>
               {connection === "online" ? "Tempo real conectado" : connection === "connecting" ? "Conectando…" : "Modo offline"}
@@ -384,7 +393,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
           <aside className="people-panel">
             <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
             <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Auditório · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
-            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>4 squads · cada um com sala de reunião própria</strong><p>Auditório e diretoria (2 diretores) ficam no corredor superior.</p></section>
+            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>{layout.rooms.length} salas · totalmente personalizável</strong><p>Sala geral, criação e gerência ficam no corredor superior; os squads embaixo.</p></section>
             {mediaError && <p className="media-error">{mediaError}</p>}
             {ambientError && <p className="media-error">{ambientError}</p>}
             <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>
@@ -460,6 +469,16 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             </div>
           </section>
         </div>
+      )}
+
+      {layoutEditorOpen && canEditLayout && (
+        <OfficeEditor
+          initialLayout={layout}
+          workspaceId={workspace.id}
+          spaceId={space.id}
+          onClose={() => setLayoutEditorOpen(false)}
+          onSaved={setLayout}
+        />
       )}
 
       {inviteOpen && <InviteModal organizationId={organization.id} onClose={() => setInviteOpen(false)} />}
