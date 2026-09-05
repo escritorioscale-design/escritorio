@@ -69,15 +69,16 @@ const bodyTypeLabels: Record<AvatarAppearance["bodyType"], string> = {
 const hairLabels: Record<(typeof AVATAR_HAIR_STYLES)[number], string> = {
   short: "Curto", bob: "Bob", curls: "Cachos", bun: "Preso",
   long: "Longo", ponytail: "Meio preso", mohawk: "Moicano", afro: "Black power", spiky: "Espetado", bald: "Careca",
+  dreadlocks: "Dreads", cornrows: "Tranças", natural: "Natural", swoop: "Repicado", pixie: "Pixie", loose: "Solto",
 };
 const topStyleLabels: Record<AvatarAppearance["topStyle"], string> = {
-  tshirt: "Camiseta", hoodie: "Jaqueta", jacket: "Casaco", blazer: "Colete",
+  tshirt: "Camiseta", hoodie: "Jaqueta", jacket: "Casaco", blazer: "Colete", tank: "Regata",
 };
 const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
-  pants: "Calça", shorts: "Shorts", skirt: "Saia",
+  pants: "Calça", shorts: "Shorts", skirt: "Saia", leggings: "Legging",
 };
 const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
-  glasses: "Óculos", hat: "Boné", bowtie: "Gravata", earrings: "Brincos",
+  glasses: "Óculos", sunglasses: "Óculos de sol", hat: "Boné", tophat: "Cartola", bowtie: "Gravata", necklace: "Colar", earrings: "Brincos",
 };
 
 function getObstacles(rooms: RoomData[]): Obstacle[] {

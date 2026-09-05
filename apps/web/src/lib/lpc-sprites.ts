@@ -39,6 +39,12 @@ export const HAIR_SPRITES: Record<AvatarAppearance["hairStyle"], string | null> 
   afro: sprite("hair-afro.png"),
   spiky: sprite("hair-spiky.png"),
   bald: null,
+  dreadlocks: sprite("hair-dreadlocks.png"),
+  cornrows: sprite("hair-cornrows.png"),
+  natural: sprite("hair-natural.png"),
+  swoop: sprite("hair-swoop.png"),
+  pixie: sprite("hair-pixie.png"),
+  loose: sprite("hair-loose.png"),
 };
 
 // hoodie/jacket/blazer only ship a "male" build in this asset set; reused as-is for female bodies.
@@ -48,12 +54,14 @@ export const TOP_SPRITES: Record<BodyType, Record<AvatarAppearance["topStyle"], 
     hoodie: sprite("top-hoodie.png"),
     jacket: sprite("top-jacket.png"),
     blazer: sprite("top-blazer.png"),
+    tank: sprite("top-tank-male.png"),
   },
   female: {
     tshirt: sprite("top-tshirt-female.png"),
     hoodie: sprite("top-hoodie.png"),
     jacket: sprite("top-jacket.png"),
     blazer: sprite("top-blazer.png"),
+    tank: sprite("top-tank-female.png"),
   },
 };
 
@@ -62,11 +70,13 @@ export const BOTTOM_SPRITES: Record<BodyType, Record<AvatarAppearance["bottomSty
     pants: sprite("bottom-pants-male.png"),
     shorts: sprite("bottom-shorts-male.png"),
     skirt: sprite("bottom-skirt-male.png"),
+    leggings: sprite("bottom-leggings-male.png"),
   },
   female: {
     pants: sprite("bottom-pants-female.png"),
     shorts: sprite("bottom-shorts-female.png"),
     skirt: sprite("bottom-skirt-female.png"),
+    leggings: sprite("bottom-leggings-female.png"),
   },
 };
 
@@ -77,8 +87,11 @@ export const SHOES_SPRITES: Record<BodyType, string> = {
 
 export const ACCESSORY_SPRITES: Record<AvatarAppearance["accessories"][number], string> = {
   glasses: sprite("acc-glasses.png"),
+  sunglasses: sprite("acc-sunglasses.png"),
   hat: sprite("acc-hat.png"),
+  tophat: sprite("acc-tophat.png"),
   bowtie: sprite("acc-bowtie.png"),
+  necklace: sprite("acc-necklace.png"),
   earrings: sprite("acc-earrings.png"),
 };
 

@@ -4,10 +4,13 @@ export const AVATAR_TOP_COLORS = ["#7257e8", "#397bd9", "#21a179", "#d84d68", "#
 export const AVATAR_BOTTOM_COLORS = ["#253047", "#3f526f", "#6a594c", "#242426", "#805f9b", "#d8d4ca", "#7a2b30"] as const;
 export const AVATAR_SHOE_COLORS = ["#f4f1e9", "#28282b", "#6e4935", "#d04a50", "#d8ff63"] as const;
 export const AVATAR_BODY_TYPES = ["male", "female"] as const;
-export const AVATAR_HAIR_STYLES = ["short", "bob", "curls", "bun", "long", "ponytail", "mohawk", "afro", "spiky", "bald"] as const;
-export const AVATAR_TOP_STYLES = ["tshirt", "hoodie", "jacket", "blazer"] as const;
-export const AVATAR_BOTTOM_STYLES = ["pants", "shorts", "skirt"] as const;
-export const AVATAR_ACCESSORIES = ["glasses", "hat", "bowtie", "earrings"] as const;
+export const AVATAR_HAIR_STYLES = [
+  "short", "bob", "curls", "bun", "long", "ponytail", "mohawk", "afro", "spiky", "bald",
+  "dreadlocks", "cornrows", "natural", "swoop", "pixie", "loose",
+] as const;
+export const AVATAR_TOP_STYLES = ["tshirt", "hoodie", "jacket", "blazer", "tank"] as const;
+export const AVATAR_BOTTOM_STYLES = ["pants", "shorts", "skirt", "leggings"] as const;
+export const AVATAR_ACCESSORIES = ["glasses", "sunglasses", "hat", "tophat", "bowtie", "necklace", "earrings"] as const;
 
 export type AvatarAppearance = {
   bodyType: (typeof AVATAR_BODY_TYPES)[number];
