@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "DEBUG=prisma:engines,prisma:generator,prisma:fetch-engine prisma generate",
+    "generate": "DEBUG=prisma:* prisma generate",
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
