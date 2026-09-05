@@ -5,6 +5,7 @@ const monorepoRoot = path.join(__dirname, "../..");
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["192.168.0.214"],
   outputFileTracingRoot: monorepoRoot,
   outputFileTracingIncludes: {
     "/**/*": ["../../node_modules/@prisma/client/runtime/query_compiler_bg.postgresql.wasm"],

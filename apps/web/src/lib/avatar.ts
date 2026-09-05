@@ -6,7 +6,7 @@ export const AVATAR_SHOE_COLORS = ["#f4f1e9", "#28282b", "#6e4935", "#d04a50", "
 export const AVATAR_HAIR_STYLES = ["short", "bob", "curls", "bun", "long", "ponytail", "mohawk", "afro", "spiky", "bald"] as const;
 export const AVATAR_TOP_STYLES = ["tshirt", "hoodie", "jacket", "blazer"] as const;
 export const AVATAR_BOTTOM_STYLES = ["pants", "shorts", "skirt"] as const;
-export const AVATAR_ACCESSORIES = ["glasses", "headphones", "hat", "bowtie", "earrings"] as const;
+export const AVATAR_ACCESSORIES = ["glasses", "hat", "bowtie", "earrings"] as const;
 
 export type AvatarAppearance = {
   skinTone: (typeof AVATAR_SKIN_TONES)[number];

@@ -72,7 +72,7 @@ const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
   pants: "Calça", shorts: "Shorts", skirt: "Saia",
 };
 const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
-  glasses: "Óculos", headphones: "Headset", hat: "Boné", bowtie: "Gravata", earrings: "Brincos",
+  glasses: "Óculos", hat: "Boné", bowtie: "Gravata", earrings: "Brincos",
 };
 
 function getObstacles(rooms: RoomData[]): Obstacle[] {
