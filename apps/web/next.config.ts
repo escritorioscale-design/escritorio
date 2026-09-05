@@ -6,6 +6,9 @@ const monorepoRoot = path.join(__dirname, "../..");
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: monorepoRoot,
+  outputFileTracingIncludes: {
+    "/**/*": ["../../node_modules/@prisma/client/runtime/query_compiler_bg.postgresql.wasm"],
+  },
   turbopack: {
     root: monorepoRoot,
   },
