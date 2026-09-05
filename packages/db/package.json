@@ -7,12 +7,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "prisma generate && node scripts/copy-engine.mjs",
+    "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.12.0",
     "@prisma/client": "6.12.0",
     "pg": "8.16.3"
   },
