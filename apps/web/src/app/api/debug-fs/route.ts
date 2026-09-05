@@ -18,9 +18,18 @@ export async function GET() {
     path.join(__dirname, "../../../../node_modules/@prisma/client/runtime"),
   ];
 
+  let requireResult: unknown;
+  try {
+    const resolved = require.resolve("@prisma/client/runtime/query_compiler_bg.postgresql.wasm");
+    requireResult = { ok: true, resolved };
+  } catch (e) {
+    requireResult = { ok: false, error: (e as Error).message, stack: (e as Error).stack };
+  }
+
   return Response.json({
     cwd: process.cwd(),
     dirname: __dirname,
     candidates: candidates.map((c) => ({ path: c, contents: safeList(c) })),
+    requireResult,
   });
 }
