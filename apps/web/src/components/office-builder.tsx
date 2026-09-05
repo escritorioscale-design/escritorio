@@ -59,7 +59,7 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
 
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
+  const [fit, setFit] = useState({ zoom: 1, offsetX: 0, offsetY: 0 });
   const [openDoors, setOpenDoors] = useState<ReadonlySet<string>>(new Set());
 
   const layoutRef = useRef(resolvedLayout);
@@ -80,15 +80,18 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
   const keysRef = useRef<Set<string>>(new Set());
   const lastReportRef = useRef("");
 
-  // Fill the whole container (cover, not contain) at a fixed zoom — no
-  // manual zoom or panning, just resize-to-fit.
+  // Shrink the map to fit entirely inside the container (never crop a room
+  // off-screen) and center it — any leftover space is split evenly on
+  // whichever axis doesn't match the map's aspect ratio, instead of piling
+  // up in one corner.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const observer = new ResizeObserver(() => {
       const cw = container.clientWidth, ch = container.clientHeight;
       if (!cw || !ch) return;
-      setZoom(Math.max(cw / worldW, ch / worldH));
+      const zoom = Math.min(cw / worldW, ch / worldH);
+      setFit({ zoom, offsetX: (cw - worldW * zoom) / 2, offsetY: (ch - worldH * zoom) / 2 });
     });
     observer.observe(container);
     return () => observer.disconnect();
@@ -217,7 +220,7 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
         <div
           ref={worldRef}
           className="css-office-world"
-          style={{ width: worldW, height: worldH, transform: `scale(${zoom})`, background: THEME_BG[theme] }}
+          style={{ width: worldW, height: worldH, transform: `translate(${fit.offsetX}px, ${fit.offsetY}px) scale(${fit.zoom})`, background: THEME_BG[theme] }}
           onPointerUp={handlePointerUp}
         >
           {resolvedLayout.rooms.map((room) => (
