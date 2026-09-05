@@ -47,7 +47,7 @@ const avatarInput = z.object({
   accessory: z.enum(["none", "glasses", "headphones"]),
 }).strict();
 type Avatar = z.infer<typeof avatarInput>;
-type Presence = { userId: string; name: string; avatar?: Avatar; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; updatedAt: number };
+type Presence = { userId: string; name: string; avatar?: Avatar; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; updatedAt: number };
 const directionInput = z.enum(["up", "down", "left", "right"]);
 
 const presenceInput = z.object({
@@ -57,8 +57,9 @@ const presenceInput = z.object({
   direction: directionInput.default("down"),
   moving: z.boolean().default(false),
   sitting: z.boolean().default(false),
+  seatId: z.string().nullable().default(null),
 });
-const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true });
+const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true, seatId: true });
 
 let redis: RedisClientType | null = null;
 const localPresence = new Map<string, Map<string, Presence>>();

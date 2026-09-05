@@ -16,6 +16,22 @@ import { InviteModal } from "@/components/invite-modal";
 import { OfficeCanvas } from "@/components/office-canvas";
 import { signOut } from "@/lib/auth-client";
 import {
+  clampPoint,
+  corridorY,
+  directionFromVector,
+  doorApproach,
+  doorX,
+  getObstacles,
+  getSeats,
+  isInsideRoom,
+  nearestOpenPosition,
+  openDoorsForPosition,
+  resolveMovement,
+  type Obstacle,
+  type Point,
+  type Seat,
+} from "@/lib/office-layout";
+import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
   AVATAR_BOTTOM_COLORS,
@@ -41,11 +57,9 @@ type Presence = {
   direction?: AvatarDirection;
   moving?: boolean;
   sitting?: boolean;
+  seatId?: string | null;
 };
 type MediaGrant = { token: string; serverUrl: string };
-type Point = { x: number; y: number };
-type Obstacle = Point & { width: number; height: number };
-type Seat = Point & { id: string; roomId: string; direction: AvatarDirection };
 
 type Props = {
   user: { id: string; name: string; email: string; avatar: AvatarAppearance };
@@ -57,9 +71,6 @@ type Props = {
 
 type OfficeTheme = "day" | "neon" | "studio";
 
-const palette: Record<string, string> = {
-  SOCIAL: "#f4e0c9", FOCUS: "#dfe7df", MEETING: "#ddd8f2", PROXIMITY: "#dceacb",
-};
 const movementKeys: Record<string, Point> = {
   arrowup: { x: 0, y: -1 }, w: { x: 0, y: -1 },
   arrowdown: { x: 0, y: 1 }, s: { x: 0, y: 1 },
@@ -83,157 +94,6 @@ const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
 const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
   glasses: "Óculos", sunglasses: "Óculos de sol", hat: "Boné", tophat: "Cartola", bowtie: "Gravata", necklace: "Colar", earrings: "Brincos",
 };
-
-function getObstacles(rooms: RoomData[], openDoorIds: ReadonlySet<string> = new Set()): Obstacle[] {
-  return rooms.flatMap((room) => {
-    const walls = roomWalls(room, openDoorIds.has(room.id));
-    if (room.kind === "MEETING") {
-      return [...walls, { x: room.x + room.width * .18, y: room.y + room.height * .27, width: room.width * .64, height: room.height * .43 }];
-    }
-    if (room.kind === "PROXIMITY") {
-      return [...walls, { x: room.x + room.width * .12, y: room.y + room.height * .29, width: room.width * .62, height: room.height * .52 }];
-    }
-    if (room.kind === "SOCIAL" && room.name.toLowerCase().includes("cria")) {
-      return [...walls, ...Array.from({ length: 4 }, (_, index) => ({
-        x: room.x + room.width * (.12 + (index % 2) * .48),
-        y: room.y + room.height * (.34 + Math.floor(index / 2) * .34),
-        width: room.width * .3,
-        height: room.height * .14,
-      }))];
-    }
-    if (room.kind === "SOCIAL") {
-      return [...walls, ...[
-        { x: room.x + room.width * .2, y: room.y + room.height * .36, width: room.width * .38, height: room.height * .15 },
-        { x: room.x + room.width * .48, y: room.y + room.height * .62, width: room.width * .39, height: room.height * .15 },
-        { x: room.x + room.width * .72, y: room.y + room.height * .29, width: room.width * .14, height: room.height * .18 },
-      ]];
-    }
-    if (room.kind === "FOCUS") {
-      return [...walls, ...Array.from({ length: 4 }, (_, index) => ({
-        x: room.x + room.width * (.12 + (index % 2) * .48),
-        y: room.y + room.height * (.31 + Math.floor(index / 2) * .38),
-        width: room.width * .3,
-        height: room.height * .16,
-      }))];
-    }
-    return walls;
-  });
-}
-
-function getSeats(rooms: RoomData[]): Seat[] {
-  return rooms.flatMap((room) => {
-    const seats: Seat[] = [];
-    const add = (id: string, x: number, y: number, direction: AvatarDirection) => seats.push({ id, roomId: room.id, x, y, direction });
-
-    if (room.kind === "MEETING") {
-      const chairs: Array<[number, number, AvatarDirection]> = [
-        [.24, .22, "down"], [.42, .18, "down"], [.60, .18, "down"], [.76, .22, "down"],
-        [.76, .82, "up"], [.58, .86, "up"], [.40, .86, "up"], [.24, .82, "up"],
-      ];
-      chairs.forEach(([x, y, direction], index) => add(`${room.id}-chair-${index + 1}`, room.x + room.width * x, room.y + room.height * y, direction));
-      return seats;
-    }
-
-    if (room.kind === "FOCUS" || (room.kind === "SOCIAL" && room.name.toLowerCase().includes("cria"))) {
-      for (let index = 0; index < 4; index += 1) {
-        const deskX = room.x + room.width * (.12 + (index % 2) * .48);
-        const deskY = room.y + room.height * (.34 + Math.floor(index / 2) * .34);
-        add(`${room.id}-chair-${index + 1}`, deskX + room.width * .15, deskY + room.height * .27, "up");
-      }
-      return seats;
-    }
-
-    if (room.kind === "PROXIMITY") add(`${room.id}-chair-1`, room.x + room.width * .49, room.y + room.height * .86, "up");
-    return seats;
-  });
-}
-
-function roomWalls(room: RoomData, doorOpen: boolean): Obstacle[] {
-  const thickness = 1.2;
-  const doorWidth = 6;
-  const left = room.x;
-  const right = room.x + room.width;
-  const top = room.y;
-  const bottom = room.y + room.height;
-  const horizontalY = room.y < 40 ? bottom - thickness : top;
-  const firstWidth = (room.width - doorWidth) / 2;
-  const horizontalWalls = doorOpen
-    ? [
-      { x: left, y: horizontalY, width: firstWidth, height: thickness },
-      { x: left + firstWidth + doorWidth, y: horizontalY, width: firstWidth, height: thickness },
-    ]
-    : [{ x: left, y: horizontalY, width: room.width, height: thickness }];
-  return [
-    { x: left, y: top, width: thickness, height: room.height },
-    { x: right - thickness, y: top, width: thickness, height: room.height },
-    ...horizontalWalls,
-  ];
-}
-
-function inside(point: Point, obstacle: Obstacle, padding = 1.6) {
-  return point.x > obstacle.x - padding && point.x < obstacle.x + obstacle.width + padding
-    && point.y > obstacle.y - padding && point.y < obstacle.y + obstacle.height + padding;
-}
-
-function clampPoint(point: Point): Point {
-  return { x: Math.max(2, Math.min(98, point.x)), y: Math.max(5, Math.min(96, point.y)) };
-}
-
-function openPosition(point: Point, obstacles: Obstacle[]) {
-  return !obstacles.some((obstacle) => inside(point, obstacle));
-}
-
-function nearestOpenPosition(point: Point, obstacles: Obstacle[]): Point {
-  const clamped = clampPoint(point);
-  if (openPosition(clamped, obstacles)) return clamped;
-  for (let radius = 1; radius <= 12; radius += 1) {
-    for (let angle = 0; angle < 360; angle += 22.5) {
-      const radians = angle * Math.PI / 180;
-      const candidate = clampPoint({ x: clamped.x + Math.cos(radians) * radius, y: clamped.y + Math.sin(radians) * radius });
-      if (openPosition(candidate, obstacles)) return candidate;
-    }
-  }
-  return clamped;
-}
-
-function resolveMovement(current: Point, delta: Point, obstacles: Obstacle[]): Point {
-  const direct = clampPoint({ x: current.x + delta.x, y: current.y + delta.y });
-  const clearPath = (candidate: Point, pathDelta = delta) => {
-    const pathSamples = Math.max(1, Math.ceil(Math.hypot(pathDelta.x, pathDelta.y) / .45));
-    for (let index = 1; index <= pathSamples; index += 1) {
-      const progress = index / pathSamples;
-      if (!openPosition(clampPoint({ x: current.x + pathDelta.x * progress, y: current.y + pathDelta.y * progress }), obstacles)) return false;
-    }
-    return openPosition(candidate, obstacles);
-  };
-  if (clearPath(direct)) return direct;
-  const horizontal = clampPoint({ x: current.x + delta.x, y: current.y });
-  if (clearPath(horizontal, { x: delta.x, y: 0 })) return horizontal;
-  const vertical = clampPoint({ x: current.x, y: current.y + delta.y });
-  return clearPath(vertical, { x: 0, y: delta.y }) ? vertical : current;
-}
-
-function doorPoint(room: RoomData): Point {
-  return { x: room.x + room.width / 2, y: room.y < 40 ? room.y + room.height : room.y };
-}
-
-function isInsideRoom(point: Point, room: RoomData) {
-  return point.x > room.x + 1.5 && point.x < room.x + room.width - 1.5
-    && point.y > room.y + 1.5 && point.y < room.y + room.height - 1.5;
-}
-
-function openDoorsForPosition(point: Point, rooms: RoomData[]): Set<string> {
-  return new Set(rooms.filter((room) => {
-    const door = doorPoint(room);
-    return Math.hypot(door.x - point.x, door.y - point.y) <= 5.5 || isInsideRoom(point, room);
-  }).map((room) => room.id));
-}
-
-function directionFromVector(x: number, y: number, fallback: AvatarDirection): AvatarDirection {
-  if (Math.abs(x) < .001 && Math.abs(y) < .001) return fallback;
-  if (Math.abs(x) > Math.abs(y)) return x > 0 ? "right" : "left";
-  return y > 0 ? "down" : "up";
-}
 
 function AvatarSwatches({ values, value, onChange, label }: {
   values: readonly string[];
@@ -286,10 +146,16 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   const directionRef = useRef<AvatarDirection>("down");
   const movingRef = useRef(false);
   const sittingRef = useRef(false);
+  const seatIdRef = useRef<string | null>(null);
+  const peopleRef = useRef<Record<string, Presence>>({});
   const pressedKeysRef = useRef(new Set<string>());
-  const targetRef = useRef<Point | null>(null);
-  const destinationRef = useRef<Point | null>(null);
+  const pathRef = useRef<Point[]>([]);
+  const stuckTicksRef = useRef(0);
   const lastEmitRef = useRef(0);
+
+  useEffect(() => {
+    peopleRef.current = people;
+  }, [people]);
 
   useEffect(() => {
     try {
@@ -303,11 +169,11 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
     localStorage.setItem("orbit-office-preferences", JSON.stringify({ theme: officeTheme, decorations: decorationsVisible }));
   }, [officeTheme, decorationsVisible]);
 
-  const emitMovement = useCallback((next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false, nextSitting = sittingRef.current) => {
+  const emitMovement = useCallback((next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false, nextSitting = sittingRef.current, nextSeatId = seatIdRef.current) => {
     const now = performance.now();
     if (!force && now - lastEmitRef.current < 75) return;
     lastEmitRef.current = now;
-    socketRef.current?.emit("position:update", { ...next, direction: nextDirection, moving: nextMoving, sitting: nextSitting });
+    socketRef.current?.emit("position:update", { ...next, direction: nextDirection, moving: nextMoving, sitting: nextSitting, seatId: nextSeatId });
   }, []);
 
   useEffect(() => {
@@ -335,6 +201,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             direction: directionRef.current,
             moving: false,
             sitting: false,
+            seatId: null,
           });
         });
         socket.on("disconnect", () => setConnection("offline"));
@@ -358,8 +225,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   useEffect(() => {
     if (editorOpen || officeEditorOpen) {
       pressedKeysRef.current.clear();
-      targetRef.current = null;
-      destinationRef.current = null;
+      pathRef.current = [];
       return;
     }
 
@@ -373,11 +239,11 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
         if (sittingRef.current) {
           sittingRef.current = false;
           setSitting(false);
-          emitMovement(positionRef.current, directionRef.current, false, true, false);
+          seatIdRef.current = null;
+          emitMovement(positionRef.current, directionRef.current, false, true, false, null);
         }
         pressedKeysRef.current.add(key);
-        targetRef.current = null;
-        destinationRef.current = null;
+        pathRef.current = [];
       } else {
         pressedKeysRef.current.delete(key);
       }
@@ -395,18 +261,13 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
         if (delta) vector = { x: vector.x + delta.x, y: vector.y + delta.y };
       }
 
-      const target = targetRef.current;
-      if (!vector.x && !vector.y && target) {
+      if (!vector.x && !vector.y && pathRef.current.length) {
+        const target = pathRef.current[0];
         vector = { x: target.x - positionRef.current.x, y: target.y - positionRef.current.y };
         if (Math.hypot(vector.x, vector.y) < .35) {
-          if (destinationRef.current) {
-            targetRef.current = destinationRef.current;
-            destinationRef.current = null;
-            vector = { x: targetRef.current.x - positionRef.current.x, y: targetRef.current.y - positionRef.current.y };
-          } else {
-            targetRef.current = null;
-            vector = { x: 0, y: 0 };
-          }
+          pathRef.current = pathRef.current.slice(1);
+          const next = pathRef.current[0];
+          vector = next ? { x: next.x - positionRef.current.x, y: next.y - positionRef.current.y } : { x: 0, y: 0 };
         }
       }
 
@@ -416,31 +277,55 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
         if (sittingRef.current) {
           sittingRef.current = false;
           setSitting(false);
+          seatIdRef.current = null;
         }
         const speed = 15.5;
         const step = Math.min(speed * elapsed, magnitude);
-        const next = resolveMovement(positionRef.current, {
-          x: vector.x / magnitude * step,
-          y: vector.y / magnitude * step,
-        }, getObstacles(rooms, openDoorsForPosition(positionRef.current, rooms)));
+        const tickObstacles = getObstacles(rooms, openDoorsForPosition(positionRef.current, rooms));
+        let attempt = { x: vector.x / magnitude * step, y: vector.y / magnitude * step };
+        if (pathRef.current.length && stuckTicksRef.current > 12) {
+          // Straight-line steering can't get around a rectangle sitting between
+          // us and the target (e.g. a desk in front of its own chair) — nudge
+          // sideways, alternating sides, until we clear it and can head
+          // straight at the target again.
+          const perpendicular = { x: -vector.y / magnitude, y: vector.x / magnitude };
+          const side = Math.floor(stuckTicksRef.current / 12) % 2 === 0 ? 1 : -1;
+          attempt = { x: attempt.x + perpendicular.x * side * step, y: attempt.y + perpendicular.y * side * step };
+        }
+        const next = resolveMovement(positionRef.current, attempt, tickObstacles);
         const nextDirection = directionFromVector(vector.x, vector.y, directionRef.current);
         if (nextDirection !== directionRef.current) {
           directionRef.current = nextDirection;
           setDirection(nextDirection);
         }
-        if (next.x !== positionRef.current.x || next.y !== positionRef.current.y) {
+        const distanceMoved = Math.hypot(next.x - positionRef.current.x, next.y - positionRef.current.y);
+        if (distanceMoved > .001) {
           positionRef.current = next;
           setPosition(next);
           isMoving = true;
           emitMovement(next, nextDirection, true);
-        } else if (targetRef.current) {
-          targetRef.current = null;
-          destinationRef.current = null;
+        }
+        // A sliver of progress (sliding along a wall while a door is still
+        // shut, or nudging past a corner) still counts as "stuck" for path
+        // steering — only a real step resets the counter, otherwise a
+        // desk-in-front-of-its-chair situation would silently reset it every
+        // tick and the sidestep above would never kick in.
+        if (distanceMoved > step * .2) {
+          stuckTicksRef.current = 0;
+        } else if (pathRef.current.length) {
+          // Only give up once we've made no real progress for a while.
+          stuckTicksRef.current += 1;
+          if (stuckTicksRef.current > 150) {
+            pathRef.current = [];
+            stuckTicksRef.current = 0;
+          }
         }
       }
 
-      if (!isMoving && !targetRef.current && pressedKeysRef.current.size === 0 && !sittingRef.current) {
+      if (!isMoving && !pathRef.current.length && pressedKeysRef.current.size === 0 && !sittingRef.current) {
+        const occupiedSeatIds = new Set(Object.values(peopleRef.current).map((person) => person.seatId).filter(Boolean));
         const nearestSeat = seats
+          .filter((seat) => !occupiedSeatIds.has(seat.id))
           .map((seat) => ({ seat, distance: Math.hypot(seat.x - positionRef.current.x, seat.y - positionRef.current.y) }))
           .filter(({ distance }) => distance <= 3.2)
           .sort((a, b) => a.distance - b.distance)[0]?.seat;
@@ -451,7 +336,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
           setDirection(nearestSeat.direction);
           sittingRef.current = true;
           setSitting(true);
-          emitMovement(positionRef.current, nearestSeat.direction, false, true, true);
+          seatIdRef.current = nearestSeat.id;
+          emitMovement(positionRef.current, nearestSeat.direction, false, true, true, nearestSeat.id);
         }
       }
 
@@ -485,16 +371,34 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
     if (sittingRef.current) {
       sittingRef.current = false;
       setSitting(false);
+      seatIdRef.current = null;
     }
+    stuckTicksRef.current = 0;
     const requested = clampPoint({ x, y });
+    const currentRoom = rooms.find((room) => isInsideRoom(positionRef.current, room));
     const entryRoom = rooms.find((room) => isInsideRoom(requested, room));
-    if (entryRoom && !isInsideRoom(positionRef.current, entryRoom)) {
-      targetRef.current = doorPoint(entryRoom);
-      destinationRef.current = requested;
-    } else {
-      targetRef.current = requested;
-      destinationRef.current = null;
+    const path: Point[] = [];
+    // Leaving one room and/or entering another: step out through the current
+    // room's own door into the shared corridor, slide along the corridor to
+    // line up with the target room's door, then step in — rather than a
+    // diagonal shortcut that can clip a neighboring room's wall corner.
+    if (currentRoom && currentRoom.id !== entryRoom?.id) {
+      const y = corridorY(rooms);
+      path.push({ x: doorX(currentRoom), y });
+      if (entryRoom) path.push({ x: doorX(entryRoom), y });
     }
+    if (entryRoom && entryRoom.id !== currentRoom?.id) {
+      path.push(doorApproach(entryRoom));
+      // Focus/social rooms have their desks in two side columns with a clear
+      // aisle straight down the middle. Go down that aisle to the target's
+      // own row before turning to approach it, instead of cutting diagonally
+      // across a desk that sits between the door and a chair behind it.
+      if (entryRoom.kind === "FOCUS" || entryRoom.kind === "SOCIAL") {
+        path.push({ x: doorX(entryRoom), y: requested.y });
+      }
+    }
+    path.push(requested);
+    pathRef.current = path;
   }
 
   const openDoorIds = useMemo(() => [...openDoorsForPosition(position, rooms)], [position, rooms]);
@@ -596,21 +500,16 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
               <div className="map-decor decor-coffee" aria-hidden="true" />
             </>}
             <OfficeCanvas rooms={rooms} theme={officeTheme} openDoorIds={openDoorIds} />
-            <div className="legacy-room-layer" aria-hidden="true">
             {rooms.map((room) => (
               <div
-                key={room.id}
-                className={`map-room room-${room.kind.toLowerCase()}`}
-                style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%`, background: palette[room.kind] }}
+                key={`title-${room.id}`}
+                className="map-room-title"
+                style={{ left: `calc(${room.x}% + 12px)`, top: `calc(${room.y}% + 10px)`, pointerEvents: "none" }}
               >
-                <div className="map-room-title"><strong>{room.name}</strong><small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small></div>
-                {room.kind === "SOCIAL" && (room.name.toLowerCase().includes("cria") ? <div className="room-art creative-team-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}<strong /></div> : <div className="room-art social-art"><i /><i /><i /></div>)}
-                {room.kind === "FOCUS" && <div className="room-art squad-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}</div>}
-                {room.kind === "MEETING" && <button className="room-art meeting-art" onClick={(event) => { event.stopPropagation(); joinCall(room); }}><span /><em><Video /> Entrar</em></button>}
-                {room.kind === "PROXIMITY" && (room.name.toLowerCase().includes("gerente") ? <div className="room-art manager-art"><i /><b /></div> : <div className="room-art garden-art"><i>✦</i><i>✿</i><i>✦</i></div>)}
+                <strong>{room.name}</strong>
+                <small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small>
               </div>
             ))}
-            </div>
             {rooms.filter((room) => room.kind === "MEETING").map((room) => (
               <button key={`meeting-${room.id}`} className="map-meeting-hit" style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%` }} onClick={() => joinCall(room)} aria-label="Entrar na sala de reunião" />
             ))}
