@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "DEBUG=prisma:* prisma generate",
+    "generate": "prisma generate && node scripts/copy-engine.mjs",
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
