@@ -9,10 +9,11 @@ type Props = {
   appearance: AvatarAppearance;
   direction?: AvatarDirection;
   moving?: boolean;
+  sitting?: boolean;
   compact?: boolean;
 };
 
-export function AvatarCharacter({ appearance, direction = "down", moving = false, compact = false }: Props) {
+export function AvatarCharacter({ appearance, direction = "down", moving = false, sitting = false, compact = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const directionRef = useRef(direction);
   const movingRef = useRef(moving);
@@ -69,7 +70,7 @@ export function AvatarCharacter({ appearance, direction = "down", moving = false
 
   return (
     <div
-      className={`avatar-character${moving ? " is-walking" : ""}${compact ? " is-compact" : ""}`}
+      className={`avatar-character${moving ? " is-walking" : ""}${sitting ? " is-seated" : ""}${compact ? " is-compact" : ""}`}
       aria-hidden="true"
     >
       <span className="avatar-ground-shadow" />

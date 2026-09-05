@@ -67,8 +67,25 @@ function drawRoom(g: Graphics, room: Room, width: number, height: number, c: The
   }
 }
 
-export function OfficeCanvas({ rooms, theme }: { rooms: Room[]; theme: Theme }) {
+function drawDoors(g: Graphics, rooms: Room[], width: number, height: number, theme: Theme, openDoorIds: string[]) {
+  const c = colors[theme];
+  for (const room of rooms) {
+    const doorX = width * (room.x + room.width / 2) / 100;
+    const doorY = height * (room.y < 40 ? room.y + room.height : room.y) / 100;
+    const isOpen = openDoorIds.includes(room.id);
+    const doorWidth = Math.max(16, width * .06);
+    g.rect(doorX - doorWidth / 2, doorY - 2, doorWidth, 5).fill(isOpen ? 0x63e8cc : c.wall);
+    if (isOpen) {
+      g.moveTo(doorX - doorWidth / 2, doorY + 2).lineTo(doorX - doorWidth / 2, doorY + Math.min(22, height * .035)).stroke({ color: 0x63e8cc, width: 2, alpha: .9 });
+    } else {
+      g.rect(doorX - doorWidth / 2, doorY - 2, doorWidth, 5).stroke({ color: c.trim, width: 1, alpha: .9 });
+    }
+  }
+}
+
+export function OfficeCanvas({ rooms, theme, openDoorIds = [] }: { rooms: Room[]; theme: Theme; openDoorIds?: string[] }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const openDoorKey = openDoorIds.join(",");
 
   useEffect(() => {
     const host = hostRef.current;
@@ -89,6 +106,9 @@ export function OfficeCanvas({ rooms, theme }: { rooms: Room[]; theme: Theme }) 
         sprite.width = width;
         sprite.height = height;
         app.stage.addChild(sprite);
+        const doors = new Graphics();
+        drawDoors(doors, rooms, width, height, theme, openDoorIds);
+        app.stage.addChild(doors);
         return;
       }
       const c = colors[theme];
@@ -100,6 +120,9 @@ export function OfficeCanvas({ rooms, theme }: { rooms: Room[]; theme: Theme }) 
       g.rect(width * .03, height * .384, width * .94, height * .046).fill(c.floor).stroke({ color: c.wall, width: 2, alpha: .35 });
       for (const room of rooms) drawRoom(g, room, width, height, c);
       app.stage.addChild(g);
+      const doors = new Graphics();
+      drawDoors(doors, rooms, width, height, theme, openDoorIds);
+      app.stage.addChild(doors);
     };
 
     void app.init({ antialias: false, backgroundAlpha: 0, autoDensity: true, resolution: Math.min(window.devicePixelRatio, 2) }).then(async () => {
@@ -118,7 +141,7 @@ export function OfficeCanvas({ rooms, theme }: { rooms: Room[]; theme: Theme }) 
       observer?.disconnect();
       app.destroy(true);
     };
-  }, [rooms, theme]);
+  }, [openDoorKey, rooms, theme]);
 
   return <div ref={hostRef} className="pixel-office-canvas" aria-hidden="true" />;
 }

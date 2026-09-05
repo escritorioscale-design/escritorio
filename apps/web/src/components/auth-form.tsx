@@ -6,10 +6,16 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { signIn, signUp } from "@/lib/auth-client";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+function safeNext(next: string | undefined) {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/workspace";
+}
+
+export function AuthForm({ mode, next }: { mode: "login" | "register"; next?: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const destination = safeNext(next);
+  const switchHref = `${mode === "login" ? "/cadastro" : "/login"}${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,7 +38,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       setLoading(false);
       return;
     }
-    router.push("/workspace");
+    router.push(destination);
     router.refresh();
   }
 
@@ -55,7 +61,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       </form>
       <p className="auth-switch">
         {mode === "login" ? "Ainda não tem uma conta?" : "Já faz parte do Orbit?"}{" "}
-        <Link href={mode === "login" ? "/cadastro" : "/login"}>{mode === "login" ? "Criar conta" : "Entrar"}</Link>
+        <Link href={switchHref}>{mode === "login" ? "Criar conta" : "Entrar"}</Link>
       </p>
       <small className="auth-terms">Ao continuar, você concorda com os Termos e a Política de Privacidade.</small>
     </section>

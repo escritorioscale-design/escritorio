@@ -30,6 +30,10 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: true,
       creatorRole: "owner",
       membershipLimit: 500,
+      // No email-verification flow is wired up yet, so invitation accept/list
+      // would otherwise be blocked for every account.
+      requireEmailVerificationOnInvitation: false,
+      cancelPendingInvitationsOnReInvite: true,
     }),
     nextCookies(),
   ],

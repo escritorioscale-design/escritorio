@@ -1,6 +1,10 @@
 import { db } from "@orbit/db";
 import { Onboarding } from "@/components/onboarding";
+import { NoOfficeAccess } from "@/components/no-office-access";
+import { PendingInvitations } from "@/components/pending-invitations";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { auth } from "@/lib/auth";
+import { isPlatformAdmin } from "@/lib/admin";
 import { normalizeAvatar } from "@/lib/avatar";
 import { requireSession } from "@/lib/session";
 
@@ -43,7 +47,7 @@ function defaultOfficeRooms(rooms: OfficeRoom[], spaceId: string) {
 
 export default async function WorkspacePage() {
   const session = await requireSession();
-  const membership = await db.member.findFirst({
+  const memberships = await db.member.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "asc" },
     include: {
@@ -65,7 +69,17 @@ export default async function WorkspacePage() {
     },
   });
 
-  if (!membership) return <Onboarding />;
+  if (memberships.length === 0) {
+    const invitations = await auth.api.listUserInvitations({
+      query: { email: session.user.email },
+    });
+    if (invitations.length > 0) return <PendingInvitations invitations={invitations} />;
+    if (isPlatformAdmin(session.user.email)) return <Onboarding />;
+    return <NoOfficeAccess email={session.user.email} />;
+  }
+
+  const membership = memberships.find((candidate) => candidate.organizationId === session.session.activeOrganizationId)
+    ?? memberships[0];
   const workspace = membership.organization.workspaces[0];
   const space = workspace?.spaces[0];
   if (!workspace || !space) return <Onboarding />;
