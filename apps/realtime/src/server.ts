@@ -33,6 +33,7 @@ type Claims = JWTPayload & {
   organizationId: string;
   name: string;
   avatar?: unknown;
+  photo?: string | null;
 };
 type OrbitSocket = Socket & { data: { claims: Claims; events: number[] } };
 type Direction = "up" | "down" | "left" | "right";
@@ -47,8 +48,9 @@ const avatarInput = z.object({
   accessory: z.enum(["none", "glasses", "headphones"]),
 }).strict();
 type Avatar = z.infer<typeof avatarInput>;
-type Presence = { userId: string; name: string; avatar?: Avatar; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; updatedAt: number };
+type Presence = { userId: string; name: string; avatar?: Avatar; photo?: string | null; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; seatLocked: boolean; updatedAt: number };
 const directionInput = z.enum(["up", "down", "left", "right"]);
+const photoInput = z.string().max(30_000).regex(/^data:image\/(png|jpeg|webp);base64,/).nullable();
 
 const presenceInput = z.object({
   x: z.number().finite().min(0).max(100),
@@ -58,8 +60,9 @@ const presenceInput = z.object({
   moving: z.boolean().default(false),
   sitting: z.boolean().default(false),
   seatId: z.string().nullable().default(null),
+  seatLocked: z.boolean().default(false),
 });
-const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true, seatId: true });
+const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true, seatId: true, seatLocked: true });
 
 let redis: RedisClientType | null = null;
 const localPresence = new Map<string, Map<string, Presence>>();
@@ -158,7 +161,13 @@ io.on("connection", async (rawSocket) => {
     const parsed = presenceInput.safeParse(payload);
     if (!parsed.success) return;
     const avatar = avatarInput.safeParse(claims.avatar);
-    current = { userId, name: claims.name, avatar: avatar.success ? avatar.data : undefined, ...parsed.data, updatedAt: Date.now() };
+    const photo = photoInput.safeParse(claims.photo ?? null);
+    current = {
+      userId, name: claims.name,
+      avatar: avatar.success ? avatar.data : undefined,
+      photo: photo.success ? photo.data : null,
+      ...parsed.data, updatedAt: Date.now(),
+    };
     await savePresence(workspaceId, current);
     socket.to(channel).emit("presence:upsert", current);
   });
@@ -177,6 +186,15 @@ io.on("connection", async (rawSocket) => {
     const parsed = avatarInput.safeParse(payload);
     if (!parsed.success) return;
     current = { ...current, avatar: parsed.data, updatedAt: Date.now() };
+    await savePresence(workspaceId, current);
+    socket.to(channel).emit("presence:upsert", current);
+  });
+
+  socket.on("photo:update", async (payload) => {
+    if (!current || !withinRateLimit(socket)) return;
+    const parsed = photoInput.safeParse(payload);
+    if (!parsed.success) return;
+    current = { ...current, photo: parsed.data, updatedAt: Date.now() };
     await savePresence(workspaceId, current);
     socket.to(channel).emit("presence:upsert", current);
   });

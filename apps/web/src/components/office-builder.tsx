@@ -46,9 +46,12 @@ const KEY_MAP: Record<string, "up" | "down" | "left" | "right"> = {
   a: "left", arrowleft: "left", d: "right", arrowright: "right",
 };
 
-export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active, children }: {
+export function OfficeBuilder({ layout, occupiedSeatIds, lockedZones, onUpdate, theme, active, children }: {
   layout?: OfficeLayout;
   occupiedSeatIds: ReadonlySet<string>;
+  /** Other people's self-locked seat bubbles (tile-space rects) — treated as
+   * temporary solid obstacles, same as a wall, for movement and pathing. */
+  lockedZones?: Rect[];
   onUpdate: (state: LocalMoveState) => void;
   theme: OfficeTheme;
   active: boolean;
@@ -65,10 +68,12 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
   const layoutRef = useRef(resolvedLayout);
   const activeRef = useRef(active);
   const occupiedRef = useRef(occupiedSeatIds);
+  const lockedZonesRef = useRef<Rect[]>(lockedZones ?? []);
   const onUpdateRef = useRef(onUpdate);
   layoutRef.current = resolvedLayout;
   activeRef.current = active;
   occupiedRef.current = occupiedSeatIds;
+  lockedZonesRef.current = lockedZones ?? [];
   onUpdateRef.current = onUpdate;
 
   const posRef = useRef({ x: resolvedLayout.mapCols / 2, y: resolvedLayout.mapRows / 2 });
@@ -146,7 +151,7 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
       if (magnitude > 0.001) {
         moving = true;
         const speed = SPEED / magnitude;
-        const blockers = [...getWalls(layoutNow, openDoorsRef.current), ...getFurnitureColliders(layoutNow)];
+        const blockers = [...getWalls(layoutNow, openDoorsRef.current), ...getFurnitureColliders(layoutNow), ...lockedZonesRef.current];
         const { x, y } = posRef.current;
         const nx = x + vx * speed * dt;
         const ny = y + vy * speed * dt;
@@ -198,7 +203,7 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
 
   function walkTo(tileX: number, tileY: number) {
     if (!activeRef.current) return;
-    pathRef.current = findPath(layoutRef.current, posRef.current.x, posRef.current.y, tileX, tileY);
+    pathRef.current = findPath(layoutRef.current, posRef.current.x, posRef.current.y, tileX, tileY, lockedZonesRef.current);
     if (sittingRef.current) { sittingRef.current = false; seatIdRef.current = null; }
   }
 
@@ -262,6 +267,13 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
               <div key={`door-${room.id}`} className={`css-office-door ${isOpen ? "open" : ""}`} style={{ left: x, top: centerY, background: color, borderColor: isOpen ? "#5fe0c4" : "transparent" }} />
             );
           })}
+          {(lockedZones ?? []).map((zone, index) => (
+            <div
+              key={`lock-${index}`}
+              className="css-office-lock-zone"
+              style={{ left: (zone.x + zone.w / 2) * TILE, top: (zone.y + zone.h / 2) * TILE, width: zone.w * TILE, height: zone.h * TILE }}
+            />
+          ))}
           <div className="css-office-actors">{children}</div>
         </div>
       </div>

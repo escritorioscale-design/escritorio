@@ -6,7 +6,7 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, CalendarDays, Check, ChevronDown, Grid2X2, LayoutGrid, LogOut, MessageSquare,
+  Bell, Camera, CalendarDays, Check, ChevronDown, Grid2X2, Lock, LockOpen, LayoutGrid, LogOut, MessageSquare,
   Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
@@ -18,7 +18,7 @@ import { OfficeEditor } from "@/components/office-editor";
 import { canHear, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
-import { DEFAULT_OFFICE_LAYOUT, roomAt, type OfficeLayout } from "@/lib/office-layout";
+import { DEFAULT_OFFICE_LAYOUT, SEAT_LOCK_RADIUS, type OfficeLayout, type Rect } from "@/lib/office-layout";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -39,6 +39,7 @@ type Presence = {
   userId: string;
   name: string;
   avatar?: AvatarAppearance;
+  photo?: string | null;
   x: number;
   y: number;
   status: string;
@@ -46,12 +47,13 @@ type Presence = {
   moving?: boolean;
   sitting?: boolean;
   seatId?: string | null;
+  seatLocked?: boolean;
 };
 type MediaGrant = { token: string; serverUrl: string };
 type Point = { x: number; y: number };
 
 type Props = {
-  user: { id: string; name: string; email: string; avatar: AvatarAppearance };
+  user: { id: string; name: string; email: string; avatar: AvatarAppearance; photo: string | null };
   organization: { id: string; name: string; role: string };
   workspace: { id: string; name: string };
   space: { id: string; name: string };
@@ -119,8 +121,13 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const [ambient, setAmbient] = useState<MediaGrant | null>(null);
   const [ambientError, setAmbientError] = useState("");
   const [micOn, setMicOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [seatLocked, setSeatLocked] = useState(false);
   const [avatar, setAvatar] = useState(user.avatar);
   const [draftAvatar, setDraftAvatar] = useState(user.avatar);
+  const [photo, setPhoto] = useState(user.photo);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
@@ -133,6 +140,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const movingRef = useRef(false);
   const sittingRef = useRef(false);
   const seatIdRef = useRef<string | null>(null);
+  const seatLockedRef = useRef(false);
   const lastEmitRef = useRef(0);
 
   const occupiedSeatIds = useMemo(
@@ -151,12 +159,25 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     localStorage.setItem("orbit-office-preferences", JSON.stringify({ theme: officeTheme }));
   }, [officeTheme]);
 
-  const emitMovement = useCallback((next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false, nextSitting = sittingRef.current, nextSeatId = seatIdRef.current) => {
+  const emitMovement = useCallback((
+    next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false,
+    nextSitting = sittingRef.current, nextSeatId = seatIdRef.current, nextSeatLocked = seatLockedRef.current,
+  ) => {
     const now = performance.now();
     if (!force && now - lastEmitRef.current < 75) return;
     lastEmitRef.current = now;
-    socketRef.current?.emit("position:update", { ...next, direction: nextDirection, moving: nextMoving, sitting: nextSitting, seatId: nextSeatId });
+    socketRef.current?.emit("position:update", {
+      ...next, direction: nextDirection, moving: nextMoving,
+      sitting: nextSitting, seatId: nextSeatId, seatLocked: nextSitting && nextSeatLocked,
+    });
   }, []);
+
+  function toggleSeatLock() {
+    const next = !seatLockedRef.current;
+    seatLockedRef.current = next;
+    setSeatLocked(next);
+    emitMovement(positionRef.current, directionRef.current, movingRef.current, true, sittingRef.current, seatIdRef.current, next);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -239,24 +260,40 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     if (state.sitting !== sittingRef.current) {
       sittingRef.current = state.sitting;
       setSitting(state.sitting);
+      // Standing up drops the lock — it only makes sense while at the desk.
+      if (!state.sitting && seatLockedRef.current) {
+        seatLockedRef.current = false;
+        setSeatLocked(false);
+      }
     }
     seatIdRef.current = state.seatId;
     emitMovement(next, state.direction, state.moving, false, state.sitting, state.seatId);
   }, [emitMovement]);
 
-  const peerPositions = useMemo(
-    () => Object.fromEntries(Object.values(people).map((person) => [person.userId, { x: person.x, y: person.y }])),
+  const selfSeatState = useMemo(() => ({ sitting, seatLocked }), [sitting, seatLocked]);
+  const peerInfo = useMemo(
+    () => Object.fromEntries(Object.values(people).map((person) => [
+      person.userId,
+      { x: person.x, y: person.y, sitting: person.sitting, seatLocked: person.seatLocked },
+    ])),
     [people],
   );
   const nearby = useMemo(
-    () => Object.values(people).filter((person) => canHear(layout, position, person)),
-    [people, position, layout],
+    () => Object.values(people).filter((person) => canHear(layout, position, person, selfSeatState, { sitting: person.sitting, seatLocked: person.seatLocked })),
+    [people, position, layout, selfSeatState],
   );
-  // Inside a room, its walls are the audio boundary — no need for the
-  // open-floor distance circle, which would be misleading there.
-  const selfRoom = useMemo(
-    () => roomAt(layout, (position.x / 100) * layout.mapCols, (position.y / 100) * layout.mapRows),
-    [layout, position],
+  const nearbyForVideo = useMemo(
+    () => nearby.map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
+    [nearby],
+  );
+  // Other people's self-locked desks are temporary solid obstacles — nobody
+  // else can walk into that little bubble while it's up.
+  const lockedZones = useMemo<Rect[]>(
+    () => Object.values(people).filter((person) => person.sitting && person.seatLocked).map((person) => {
+      const tx = (person.x / 100) * layout.mapCols, ty = (person.y / 100) * layout.mapRows;
+      return { x: tx - SEAT_LOCK_RADIUS, y: ty - SEAT_LOCK_RADIUS, w: SEAT_LOCK_RADIUS * 2, h: SEAT_LOCK_RADIUS * 2 };
+    }),
+    [people, layout],
   );
   const meetingRoom = rooms.find((room) => room.kind === "MEETING") ?? rooms[0];
 
@@ -285,6 +322,60 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
       setAvatarError("Não foi possível salvar seu personagem. Tente novamente.");
     } finally {
       setAvatarSaving(false);
+    }
+  }
+
+  function resizeToDataUrl(file: File, size = 96): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("canvas")); return; }
+        const scale = Math.max(size / image.width, size / image.height);
+        const w = image.width * scale, h = image.height * scale;
+        ctx.drawImage(image, (size - w) / 2, (size - h) / 2, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+        URL.revokeObjectURL(image.src);
+      };
+      image.onerror = () => reject(new Error("load"));
+      image.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function uploadPhoto(file: File) {
+    setPhotoUploading(true);
+    setPhotoError("");
+    try {
+      const dataUrl = await resizeToDataUrl(file);
+      const response = await fetch("/api/profile/photo", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      if (!response.ok) throw new Error("save");
+      setPhoto(dataUrl);
+      socketRef.current?.emit("photo:update", dataUrl);
+    } catch {
+      setPhotoError("Não foi possível salvar a foto. Tente uma imagem menor.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoUploading(true);
+    setPhotoError("");
+    try {
+      await fetch("/api/profile/photo", { method: "DELETE" });
+      setPhoto(null);
+      socketRef.current?.emit("photo:update", null);
+    } catch {
+      setPhotoError("Não foi possível remover a foto.");
+    } finally {
+      setPhotoUploading(false);
     }
   }
 
@@ -350,6 +441,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
               layout={layout}
               theme={officeTheme}
               occupiedSeatIds={occupiedSeatIds}
+              lockedZones={lockedZones}
               onUpdate={handleLocalUpdate}
               active={!editorOpen && !officeEditorOpen && !layoutEditorOpen}
             >
@@ -364,16 +456,14 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                   <label>{person.name}</label>
                 </div>
               ))}
-              {!selfRoom && (
-                <div
-                  className="proximity-zone"
-                  style={{
-                    left: `${position.x}%`, top: `${position.y}%`,
-                    width: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapCols) * 100}%`,
-                    height: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapRows) * 100}%`,
-                  }}
-                />
-              )}
+              <div
+                className={`proximity-zone ${seatLocked ? "locked" : ""}`}
+                style={{
+                  left: `${position.x}%`, top: `${position.y}%`,
+                  width: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapCols) * 100}%`,
+                  height: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapRows) * 100}%`,
+                }}
+              />
               <div
                 className="map-character self-character"
                 style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
@@ -387,15 +477,37 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
             <div className={`connection-pill ${connection}`}>
               {connection === "online" ? "Tempo real conectado" : connection === "connecting" ? "Conectando…" : "Modo offline"}
             </div>
-            <button
-              type="button"
-              className={`mic-toggle ${micOn ? "on" : "off"}`}
-              onClick={() => setMicOn((current) => !current)}
-              aria-pressed={micOn}
-              aria-label={micOn ? "Silenciar microfone" : "Ativar microfone"}
-            >
-              <Mic /> {micOn ? "Voz por proximidade ativa" : "Microfone mudo"}
-            </button>
+            <div className="proximity-controls">
+              <button
+                type="button"
+                className={`mic-toggle ${micOn ? "on" : "off"}`}
+                onClick={() => setMicOn((current) => !current)}
+                aria-pressed={micOn}
+                aria-label={micOn ? "Silenciar microfone" : "Ativar microfone"}
+              >
+                <Mic /> {micOn ? "Voz por proximidade ativa" : "Microfone mudo"}
+              </button>
+              <button
+                type="button"
+                className={`mic-toggle ${cameraOn ? "on" : "off"}`}
+                onClick={() => setCameraOn((current) => !current)}
+                aria-pressed={cameraOn}
+                aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+              >
+                <Camera /> {cameraOn ? "Câmera ligada" : "Câmera desligada"}
+              </button>
+              {sitting && (
+                <button
+                  type="button"
+                  className={`mic-toggle seat-lock-toggle ${seatLocked ? "on" : "off"}`}
+                  onClick={toggleSeatLock}
+                  aria-pressed={seatLocked}
+                  aria-label={seatLocked ? "Destrancar minha mesa" : "Trancar minha mesa"}
+                >
+                  {seatLocked ? <Lock /> : <LockOpen />} {seatLocked ? "Mesa trancada" : "Trancar minha mesa"}
+                </button>
+              )}
+            </div>
           </section>
 
           <aside className="people-panel">
@@ -437,6 +549,24 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 <strong>{user.name}</strong><span>Prévia em tempo real</span>
               </div>
               <div className="avatar-controls">
+                <fieldset className="avatar-fieldset avatar-photo-fieldset">
+                  <legend>Foto de perfil</legend>
+                  <p className="avatar-photo-hint">Aparece na videochamada por proximidade quando sua câmera está desligada.</p>
+                  <div className="avatar-photo-row">
+                    <span className="avatar-photo-preview">
+                      {photo ? <img src={photo} alt="" /> : <span className="avatar-photo-placeholder">{user.name.slice(0, 1).toUpperCase()}</span>}
+                    </span>
+                    <label className="avatar-photo-upload">
+                      {photoUploading ? "Enviando…" : "Escolher foto"}
+                      <input
+                        type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={photoUploading}
+                        onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadPhoto(file); event.target.value = ""; }}
+                      />
+                    </label>
+                    {photo && <button type="button" className="avatar-photo-remove" onClick={removePhoto} disabled={photoUploading}>Remover</button>}
+                  </div>
+                  {photoError && <p className="avatar-save-error">{photoError}</p>}
+                </fieldset>
                 <fieldset className="avatar-fieldset">
                   <legend>Visual</legend>
                   <div className="avatar-choice-grid">
@@ -504,8 +634,11 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
           serverUrl={ambient.serverUrl}
           layout={layout}
           selfPosition={position}
-          peers={peerPositions}
+          selfSeat={selfSeatState}
+          peers={peerInfo}
+          nearby={nearbyForVideo}
           micOn={micOn}
+          cameraOn={cameraOn}
           onError={setAmbientError}
         />
       )}

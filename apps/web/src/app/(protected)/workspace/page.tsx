@@ -87,7 +87,7 @@ export default async function WorkspacePage() {
 
   const profile = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { avatarColor: true, avatarConfig: true },
+    select: { avatarColor: true, avatarConfig: true, image: true },
   });
 
   const officeRooms = defaultOfficeRooms(
@@ -103,6 +103,7 @@ export default async function WorkspacePage() {
         name: session.user.name,
         email: session.user.email,
         avatar: normalizeAvatar(profile?.avatarConfig, profile?.avatarColor),
+        photo: profile?.image ?? null,
       }}
       organization={{ id: membership.organization.id, name: membership.organization.name, role: membership.role }}
       workspace={{ id: workspace.id, name: workspace.name }}

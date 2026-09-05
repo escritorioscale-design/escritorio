@@ -1,20 +1,20 @@
 "use client";
 
-import { LiveKitRoom, RoomAudioRenderer, StartAudio, useRoomContext } from "@livekit/components-react";
+import {
+  LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack,
+  useLocalParticipant, useRoomContext, useTracks,
+} from "@livekit/components-react";
+import { Track } from "livekit-client";
 import { useEffect } from "react";
-import { roomAt, type OfficeLayout } from "@/lib/office-layout";
+import { SEAT_LOCK_RADIUS } from "@/lib/office-layout";
 
-/** Inside this many tiles (in the open floor, outside any room), remote
- * voices play at full volume. */
+/** Inside this many tiles, remote voices play at full volume. */
 export const PROXIMITY_FULL_VOLUME_TILES = 3.5;
-/** Beyond this many tiles in the open floor, remote voices are inaudible. */
+/** Beyond this many tiles, remote voices are inaudible. */
 export const PROXIMITY_SILENT_TILES = 9;
 
 type Point = { x: number; y: number };
-
-function toTiles(layout: OfficeLayout, p: Point) {
-  return { x: (p.x / 100) * layout.mapCols, y: (p.y / 100) * layout.mapRows };
-}
+type SeatState = { sitting?: boolean; seatLocked?: boolean };
 
 function volumeForDistance(distance: number) {
   if (distance <= PROXIMITY_FULL_VOLUME_TILES) return 1;
@@ -22,33 +22,47 @@ function volumeForDistance(distance: number) {
   return 1 - (distance - PROXIMITY_FULL_VOLUME_TILES) / (PROXIMITY_SILENT_TILES - PROXIMITY_FULL_VOLUME_TILES);
 }
 
-/** A room is its own audio bubble: whoever is inside hears everyone else
- * inside, at full volume, and nobody outside hears in — same as a real
- * meeting room's walls. Locking a room already keeps outsiders from
- * physically entering, so it doubles as blocking them from the
- * conversation too. Out in the open floor (no room), it's plain
- * distance-based falloff, same as before. */
-export function canHear(layout: OfficeLayout, selfPos: Point, peerPos: Point): boolean {
-  return volumeFor(layout, selfPos, peerPos) > 0;
+/** Plain proximity by default. Once either side locks their own seat, the
+ * conversation shrinks to a tight, hard-edged bubble around that desk — full
+ * volume just inside it, silent just past it — so a stranger walking by
+ * (already kept out physically by the same lock, see office-builder.tsx)
+ * can't listen in from the doorway either. */
+export function volumeFor(
+  layout: { mapCols: number; mapRows: number },
+  selfPos: Point, peerPos: Point,
+  selfSeat: SeatState, peerSeat: SeatState,
+): number {
+  const dx = ((selfPos.x - peerPos.x) / 100) * layout.mapCols;
+  const dy = ((selfPos.y - peerPos.y) / 100) * layout.mapRows;
+  const distance = Math.hypot(dx, dy);
+  const anyLocked = (selfSeat.sitting && selfSeat.seatLocked) || (peerSeat.sitting && peerSeat.seatLocked);
+  if (anyLocked) return distance <= SEAT_LOCK_RADIUS ? 1 : 0;
+  return volumeForDistance(distance);
 }
 
-export function volumeFor(layout: OfficeLayout, selfPos: Point, peerPos: Point): number {
-  const self = toTiles(layout, selfPos);
-  const peer = toTiles(layout, peerPos);
-  const selfRoom = roomAt(layout, self.x, self.y);
-  const peerRoom = roomAt(layout, peer.x, peer.y);
-  if (selfRoom || peerRoom) return selfRoom?.id === peerRoom?.id ? 1 : 0;
-  return volumeForDistance(Math.hypot(self.x - peer.x, self.y - peer.y));
+export function canHear(
+  layout: { mapCols: number; mapRows: number },
+  selfPos: Point, peerPos: Point,
+  selfSeat: SeatState, peerSeat: SeatState,
+): boolean {
+  return volumeFor(layout, selfPos, peerPos, selfSeat, peerSeat) > 0;
 }
 
-function ProximityMixer({ layout, selfPosition, peers }: { layout: OfficeLayout; selfPosition: Point; peers: Record<string, Point> }) {
+type PeerInfo = Point & SeatState;
+
+function ProximityMixer({ layout, selfPosition, selfSeat, peers }: {
+  layout: { mapCols: number; mapRows: number };
+  selfPosition: Point;
+  selfSeat: SeatState;
+  peers: Record<string, PeerInfo>;
+}) {
   const room = useRoomContext();
   useEffect(() => {
     room.remoteParticipants.forEach((participant) => {
       const peer = peers[participant.identity];
-      participant.setVolume(peer ? volumeFor(layout, selfPosition, peer) : 0);
+      participant.setVolume(peer ? volumeFor(layout, selfPosition, peer, selfSeat, peer) : 0);
     });
-  }, [room, layout, selfPosition, peers]);
+  }, [room, layout, selfPosition, selfSeat, peers]);
   return null;
 }
 
@@ -62,20 +76,62 @@ function MicSwitch({ enabled, onError }: { enabled: boolean; onError?: (message:
   return null;
 }
 
+function CameraSwitch({ enabled, onError }: { enabled: boolean; onError?: (message: string) => void }) {
+  const { localParticipant } = useLocalParticipant();
+  useEffect(() => {
+    localParticipant.setCameraEnabled(enabled).catch(() => {
+      onError?.("Não foi possível ativar a câmera. Verifique as permissões do navegador.");
+    });
+  }, [localParticipant, enabled, onError]);
+  return null;
+}
+
+export type NearbyPerson = { userId: string; name: string; photo?: string | null };
+
+/** Small video (or photo, or initial) tiles for whoever is currently close
+ * enough to hear/be heard — the same `nearby` list already used for audio,
+ * so "who's in the bubble" always matches what's shown on screen. */
+function ProximityVideoTiles({ nearby }: { nearby: NearbyPerson[] }) {
+  const cameraTracks = useTracks([Track.Source.Camera]);
+  if (!nearby.length) return null;
+  return (
+    <div className="proximity-video-tiles">
+      {nearby.map((person) => {
+        const track = cameraTracks.find((t) => t.participant.identity === person.userId);
+        return (
+          <div className="proximity-video-tile" key={person.userId}>
+            {track ? (
+              <VideoTrack trackRef={track} />
+            ) : person.photo ? (
+              <img src={person.photo} alt="" />
+            ) : (
+              <span className="proximity-video-initial">{person.name.slice(0, 1).toUpperCase()}</span>
+            )}
+            <label>{person.name}</label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type Props = {
   token: string;
   serverUrl: string;
-  layout: OfficeLayout;
+  layout: { mapCols: number; mapRows: number };
   selfPosition: Point;
-  peers: Record<string, Point>;
+  selfSeat: SeatState;
+  peers: Record<string, PeerInfo>;
+  nearby: NearbyPerson[];
   micOn: boolean;
+  cameraOn: boolean;
   onError?: (message: string) => void;
 };
 
-/** Always-connected, audio-only room: hearing a nearby coworker is just a
- * matter of walking close enough (or into the same room), no explicit call
+/** Always-connected, audio-(and now video-)only room: hearing and seeing a
+ * nearby coworker is just a matter of walking close enough, no explicit call
  * to join. */
-export function ProximityVoice({ token, serverUrl, layout, selfPosition, peers, micOn, onError }: Props) {
+export function ProximityVoice({ token, serverUrl, layout, selfPosition, selfSeat, peers, nearby, micOn, cameraOn, onError }: Props) {
   return (
     <LiveKitRoom
       className="proximity-room"
@@ -86,8 +142,10 @@ export function ProximityVoice({ token, serverUrl, layout, selfPosition, peers, 
       video={false}
       onError={() => onError?.("Não foi possível conectar à voz por proximidade.")}
     >
-      <ProximityMixer layout={layout} selfPosition={selfPosition} peers={peers} />
+      <ProximityMixer layout={layout} selfPosition={selfPosition} selfSeat={selfSeat} peers={peers} />
       <MicSwitch enabled={micOn} onError={onError} />
+      <CameraSwitch enabled={cameraOn} onError={onError} />
+      <ProximityVideoTiles nearby={nearby} />
       <RoomAudioRenderer />
       <StartAudio label="Ativar áudio do escritório" className="proximity-start-audio" />
     </LiveKitRoom>

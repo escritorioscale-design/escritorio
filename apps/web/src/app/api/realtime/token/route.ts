@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }),
     db.user.findUnique({
       where: { id: session.user.id },
-      select: { avatarConfig: true, avatarColor: true },
+      select: { avatarConfig: true, avatarColor: true, image: true },
     }),
   ]);
   if (!workspace) return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     organizationId: workspace.organizationId,
     name: session.user.name,
     avatar: normalizeAvatar(profile?.avatarConfig, profile?.avatarColor),
+    photo: profile?.image ?? null,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.user.id)

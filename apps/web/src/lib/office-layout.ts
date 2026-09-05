@@ -12,6 +12,10 @@
 export const TILE = 32;
 export const WALL_THICKNESS = 0.4;
 export const DOOR_WIDTH = 2.5;
+/** Radius (tiles) of a self-locked seat's private bubble — used both to keep
+ * other people's characters from walking in and to cap how far the
+ * conversation carries once someone locks their own desk. */
+export const SEAT_LOCK_RADIUS = 1.8;
 
 export type DoorSide = "top" | "bottom";
 export type AvatarDirection = "up" | "down" | "left" | "right";
@@ -244,8 +248,8 @@ export function openDoorsForPosition(layout: OfficeLayout, x: number, y: number)
 // segment, so no path can be found through it.
 const CELL = 0.5;
 
-function buildBlockedGrid(layout: OfficeLayout, cols: number, rows: number): Uint8Array {
-  const rects = [...getWalls(layout, unlockedRoomIds(layout)), ...getFurnitureColliders(layout)];
+function buildBlockedGrid(layout: OfficeLayout, cols: number, rows: number, extraBlockers: Rect[]): Uint8Array {
+  const rects = [...getWalls(layout, unlockedRoomIds(layout)), ...getFurnitureColliders(layout), ...extraBlockers];
   const blocked = new Uint8Array(cols * rows);
   const margin = 0.16;
   for (const r of rects) {
@@ -289,10 +293,13 @@ function simplifyPath(points: { x: number; y: number }[]): { x: number; y: numbe
   return out;
 }
 
-export function findPath(layout: OfficeLayout, fromX: number, fromY: number, toX: number, toY: number): { x: number; y: number }[] {
+export function findPath(
+  layout: OfficeLayout, fromX: number, fromY: number, toX: number, toY: number,
+  extraBlockers: Rect[] = [],
+): { x: number; y: number }[] {
   const cols = Math.max(1, Math.ceil(layout.mapCols / CELL));
   const rows = Math.max(1, Math.ceil(layout.mapRows / CELL));
-  const blocked = buildBlockedGrid(layout, cols, rows);
+  const blocked = buildBlockedGrid(layout, cols, rows, extraBlockers);
 
   const clamp = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v / CELL)));
   const startIdx = nearestOpenCell(blocked, cols, rows, clamp(fromX, cols), clamp(fromY, rows));
