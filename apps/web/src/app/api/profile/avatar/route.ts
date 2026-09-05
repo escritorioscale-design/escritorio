@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
   AVATAR_ACCESSORIES,
+  AVATAR_BODY_TYPES,
   AVATAR_BOTTOM_COLORS,
   AVATAR_BOTTOM_STYLES,
   AVATAR_HAIR_COLORS,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/avatar";
 
 const avatarSchema = z.object({
+  bodyType: z.enum(AVATAR_BODY_TYPES),
   skinTone: z.enum(AVATAR_SKIN_TONES),
   hairStyle: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),

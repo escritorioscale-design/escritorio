@@ -14,7 +14,14 @@ export const DIRECTION_ROW: Record<AvatarDirection, number> = {
 
 const sprite = (path: string) => `/sprites/lpc/${path}`;
 
-export const BODY_SPRITE = sprite("body.png");
+type BodyType = AvatarAppearance["bodyType"];
+
+export const BODY_SPRITES: Record<BodyType, string> = {
+  male: sprite("body-male.png"),
+  female: sprite("body-female.png"),
+};
+
+export const EYES_SPRITE = sprite("eyes.png");
 
 export const HAIR_SPRITES: Record<AvatarAppearance["hairStyle"], string | null> = {
   short: sprite("hair-short.png"),
@@ -29,20 +36,39 @@ export const HAIR_SPRITES: Record<AvatarAppearance["hairStyle"], string | null> 
   bald: null,
 };
 
-export const TOP_SPRITES: Record<AvatarAppearance["topStyle"], string> = {
-  tshirt: sprite("top-tshirt.png"),
-  hoodie: sprite("top-hoodie.png"),
-  jacket: sprite("top-jacket.png"),
-  blazer: sprite("top-blazer.png"),
+// hoodie/jacket/blazer only ship a "male" build in this asset set; reused as-is for female bodies.
+export const TOP_SPRITES: Record<BodyType, Record<AvatarAppearance["topStyle"], string>> = {
+  male: {
+    tshirt: sprite("top-tshirt-male.png"),
+    hoodie: sprite("top-hoodie.png"),
+    jacket: sprite("top-jacket.png"),
+    blazer: sprite("top-blazer.png"),
+  },
+  female: {
+    tshirt: sprite("top-tshirt-female.png"),
+    hoodie: sprite("top-hoodie.png"),
+    jacket: sprite("top-jacket.png"),
+    blazer: sprite("top-blazer.png"),
+  },
 };
 
-export const BOTTOM_SPRITES: Record<AvatarAppearance["bottomStyle"], string> = {
-  pants: sprite("bottom-pants.png"),
-  shorts: sprite("bottom-shorts.png"),
-  skirt: sprite("bottom-skirt.png"),
+export const BOTTOM_SPRITES: Record<BodyType, Record<AvatarAppearance["bottomStyle"], string>> = {
+  male: {
+    pants: sprite("bottom-pants-male.png"),
+    shorts: sprite("bottom-shorts-male.png"),
+    skirt: sprite("bottom-skirt-male.png"),
+  },
+  female: {
+    pants: sprite("bottom-pants-female.png"),
+    shorts: sprite("bottom-shorts-female.png"),
+    skirt: sprite("bottom-skirt-female.png"),
+  },
 };
 
-export const SHOES_SPRITE = sprite("bottom-shoes.png");
+export const SHOES_SPRITES: Record<BodyType, string> = {
+  male: sprite("bottom-shoes-male.png"),
+  female: sprite("bottom-shoes-female.png"),
+};
 
 export const ACCESSORY_SPRITES: Record<AvatarAppearance["accessories"][number], string> = {
   glasses: sprite("acc-glasses.png"),
@@ -55,10 +81,11 @@ export type SpriteLayer = { src: string; color?: string };
 
 export function buildLayers(appearance: AvatarAppearance): SpriteLayer[] {
   const layers: SpriteLayer[] = [
-    { src: BODY_SPRITE, color: appearance.skinTone },
-    { src: SHOES_SPRITE, color: appearance.shoeColor },
-    { src: BOTTOM_SPRITES[appearance.bottomStyle], color: appearance.bottomColor },
-    { src: TOP_SPRITES[appearance.topStyle], color: appearance.topColor },
+    { src: BODY_SPRITES[appearance.bodyType], color: appearance.skinTone },
+    { src: EYES_SPRITE },
+    { src: SHOES_SPRITES[appearance.bodyType], color: appearance.shoeColor },
+    { src: BOTTOM_SPRITES[appearance.bodyType][appearance.bottomStyle], color: appearance.bottomColor },
+    { src: TOP_SPRITES[appearance.bodyType][appearance.topStyle], color: appearance.topColor },
   ];
   const hairSrc = HAIR_SPRITES[appearance.hairStyle];
   if (hairSrc) layers.push({ src: hairSrc, color: appearance.hairColor });
@@ -70,6 +97,7 @@ export function buildLayers(appearance: AvatarAppearance): SpriteLayer[] {
 
 export function layerKey(appearance: AvatarAppearance): string {
   return [
+    appearance.bodyType,
     appearance.skinTone,
     appearance.shoeColor,
     appearance.hairStyle,

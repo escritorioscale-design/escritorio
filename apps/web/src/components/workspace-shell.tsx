@@ -16,6 +16,7 @@ import { OfficeCanvas } from "@/components/office-canvas";
 import { signOut } from "@/lib/auth-client";
 import {
   AVATAR_ACCESSORIES,
+  AVATAR_BODY_TYPES,
   AVATAR_BOTTOM_COLORS,
   AVATAR_BOTTOM_STYLES,
   AVATAR_HAIR_COLORS,
@@ -62,12 +63,15 @@ const movementKeys: Record<string, Point> = {
   arrowleft: { x: -1, y: 0 }, a: { x: -1, y: 0 },
   arrowright: { x: 1, y: 0 }, d: { x: 1, y: 0 },
 };
+const bodyTypeLabels: Record<AvatarAppearance["bodyType"], string> = {
+  male: "Masculino", female: "Feminino",
+};
 const hairLabels: Record<(typeof AVATAR_HAIR_STYLES)[number], string> = {
-  short: "Curto", bob: "Bob", curls: "Cachos", bun: "Coque",
-  long: "Longo", ponytail: "Rabo de cavalo", mohawk: "Moicano", afro: "Black power", spiky: "Espetado", bald: "Careca",
+  short: "Curto", bob: "Bob", curls: "Cachos", bun: "Preso",
+  long: "Longo", ponytail: "Meio preso", mohawk: "Moicano", afro: "Black power", spiky: "Espetado", bald: "Careca",
 };
 const topStyleLabels: Record<AvatarAppearance["topStyle"], string> = {
-  tshirt: "Camiseta", hoodie: "Moletom", jacket: "Jaqueta", blazer: "Blazer",
+  tshirt: "Camiseta", hoodie: "Jaqueta", jacket: "Casaco", blazer: "Colete",
 };
 const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
   pants: "Calça", shorts: "Shorts", skirt: "Saia",
@@ -558,6 +562,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 <strong>{user.name}</strong><span>Prévia em tempo real</span>
               </div>
               <div className="avatar-controls">
+                <fieldset className="avatar-fieldset"><legend>Corpo</legend><div className="avatar-choice-grid">{AVATAR_BODY_TYPES.map((bodyType) => <button type="button" key={bodyType} className={draftAvatar.bodyType === bodyType ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bodyType }))}>{bodyTypeLabels[bodyType]}</button>)}</div></fieldset>
                 <AvatarSwatches label="Tom de pele" values={AVATAR_SKIN_TONES} value={draftAvatar.skinTone} onChange={(skinTone) => setDraftAvatar((current) => ({ ...current, skinTone: skinTone as AvatarAppearance["skinTone"] }))} />
                 <fieldset className="avatar-fieldset"><legend>Cabelo</legend><div className="avatar-choice-grid">{AVATAR_HAIR_STYLES.map((hairStyle) => <button type="button" key={hairStyle} className={draftAvatar.hairStyle === hairStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, hairStyle }))}>{hairLabels[hairStyle]}</button>)}</div></fieldset>
                 <AvatarSwatches label="Cor do cabelo" values={AVATAR_HAIR_COLORS} value={draftAvatar.hairColor} onChange={(hairColor) => setDraftAvatar((current) => ({ ...current, hairColor: hairColor as AvatarAppearance["hairColor"] }))} />

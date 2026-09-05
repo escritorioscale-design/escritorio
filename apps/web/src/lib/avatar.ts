@@ -3,12 +3,14 @@ export const AVATAR_HAIR_COLORS = ["#211b18", "#4a3026", "#7a4b2d", "#b8773e", "
 export const AVATAR_TOP_COLORS = ["#7257e8", "#397bd9", "#21a179", "#d84d68", "#e58c35", "#252529", "#f1efe9", "#d8ff63", "#8a3ffc", "#0f9aa8"] as const;
 export const AVATAR_BOTTOM_COLORS = ["#253047", "#3f526f", "#6a594c", "#242426", "#805f9b", "#d8d4ca", "#7a2b30"] as const;
 export const AVATAR_SHOE_COLORS = ["#f4f1e9", "#28282b", "#6e4935", "#d04a50", "#d8ff63"] as const;
+export const AVATAR_BODY_TYPES = ["male", "female"] as const;
 export const AVATAR_HAIR_STYLES = ["short", "bob", "curls", "bun", "long", "ponytail", "mohawk", "afro", "spiky", "bald"] as const;
 export const AVATAR_TOP_STYLES = ["tshirt", "hoodie", "jacket", "blazer"] as const;
 export const AVATAR_BOTTOM_STYLES = ["pants", "shorts", "skirt"] as const;
 export const AVATAR_ACCESSORIES = ["glasses", "hat", "bowtie", "earrings"] as const;
 
 export type AvatarAppearance = {
+  bodyType: (typeof AVATAR_BODY_TYPES)[number];
   skinTone: (typeof AVATAR_SKIN_TONES)[number];
   hairStyle: (typeof AVATAR_HAIR_STYLES)[number];
   hairColor: (typeof AVATAR_HAIR_COLORS)[number];
@@ -21,6 +23,7 @@ export type AvatarAppearance = {
 };
 
 export const DEFAULT_AVATAR: AvatarAppearance = {
+  bodyType: "male",
   skinTone: "#c8895e",
   hairStyle: "short",
   hairColor: "#211b18",
@@ -53,6 +56,7 @@ export function normalizeAvatar(value: unknown, legacyColor?: string): AvatarApp
   ));
 
   return {
+    bodyType: allowed(input.bodyType, AVATAR_BODY_TYPES, DEFAULT_AVATAR.bodyType),
     skinTone: allowed(input.skinTone, AVATAR_SKIN_TONES, DEFAULT_AVATAR.skinTone),
     hairStyle: allowed(input.hairStyle, AVATAR_HAIR_STYLES, DEFAULT_AVATAR.hairStyle),
     hairColor: allowed(input.hairColor, AVATAR_HAIR_COLORS, DEFAULT_AVATAR.hairColor),
