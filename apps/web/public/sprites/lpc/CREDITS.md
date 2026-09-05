@@ -9,6 +9,8 @@ licenses. Full per-file license text is linked from each artist's page below.
 |---|---|---|---|
 | body-male.png | body/bodies/male/walk.png | bluecarrot16, JaidynReiman, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
 | body-female.png | body/bodies/female/walk.png | Benjamin K. Smith (BenCreating), bluecarrot16, TheraHedwig, Evert, MuffinElZangano, Durrani, Pierre Vigier (pvigier), ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
+| head-male.png | head/heads/human/male/walk.png | bluecarrot16, Benjamin K. Smith (BenCreating), Stephen Challener (Redshrike) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
+| head-female.png | head/heads/human/female/walk.png | bluecarrot16, Benjamin K. Smith (BenCreating), Stephen Challener (Redshrike) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
 | eyes.png | eyes/human/adult/default/walk.png | LPC base contributors (uncredited individually in upstream CREDITS.csv) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
 | bottom-shoes-male.png | feet/shoes/basic/male/walk.png | JaidynReiman, bluecarrot16, Johannes Sjölund (wulax) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
 | bottom-shoes-female.png | feet/shoes/basic/thin/walk.png | JaidynReiman, Joe White, Johannes Sjölund (wulax) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |

@@ -21,6 +21,11 @@ export const BODY_SPRITES: Record<BodyType, string> = {
   female: sprite("body-female.png"),
 };
 
+export const HEAD_SPRITES: Record<BodyType, string> = {
+  male: sprite("head-male.png"),
+  female: sprite("head-female.png"),
+};
+
 export const EYES_SPRITE = sprite("eyes.png");
 
 export const HAIR_SPRITES: Record<AvatarAppearance["hairStyle"], string | null> = {
@@ -82,6 +87,7 @@ export type SpriteLayer = { src: string; color?: string };
 export function buildLayers(appearance: AvatarAppearance): SpriteLayer[] {
   const layers: SpriteLayer[] = [
     { src: BODY_SPRITES[appearance.bodyType], color: appearance.skinTone },
+    { src: HEAD_SPRITES[appearance.bodyType], color: appearance.skinTone },
     { src: EYES_SPRITE },
     { src: SHOES_SPRITES[appearance.bodyType], color: appearance.shoeColor },
     { src: BOTTOM_SPRITES[appearance.bodyType][appearance.bottomStyle], color: appearance.bottomColor },
