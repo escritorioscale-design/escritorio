@@ -15,10 +15,10 @@ import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-chara
 import { InviteModal } from "@/components/invite-modal";
 import { OfficeBuilder, type LocalMoveState } from "@/components/office-builder";
 import { OfficeEditor } from "@/components/office-editor";
-import { ProximityVoice, PROXIMITY_SILENT_TILES, tileDistance } from "@/components/proximity-voice";
+import { canHear, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
-import { DEFAULT_OFFICE_LAYOUT, type OfficeLayout } from "@/lib/office-layout";
+import { DEFAULT_OFFICE_LAYOUT, roomAt, type OfficeLayout } from "@/lib/office-layout";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -249,8 +249,14 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     [people],
   );
   const nearby = useMemo(
-    () => Object.values(people).filter((person) => tileDistance(position, person) < PROXIMITY_SILENT_TILES),
-    [people, position],
+    () => Object.values(people).filter((person) => canHear(layout, position, person)),
+    [people, position, layout],
+  );
+  // Inside a room, its walls are the audio boundary — no need for the
+  // open-floor distance circle, which would be misleading there.
+  const selfRoom = useMemo(
+    () => roomAt(layout, (position.x / 100) * layout.mapCols, (position.y / 100) * layout.mapRows),
+    [layout, position],
   );
   const meetingRoom = rooms.find((room) => room.kind === "MEETING") ?? rooms[0];
 
@@ -358,14 +364,16 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                   <label>{person.name}</label>
                 </div>
               ))}
-              <div
-                className="proximity-zone"
-                style={{
-                  left: `${position.x}%`, top: `${position.y}%`,
-                  width: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapCols) * 100}%`,
-                  height: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapRows) * 100}%`,
-                }}
-              />
+              {!selfRoom && (
+                <div
+                  className="proximity-zone"
+                  style={{
+                    left: `${position.x}%`, top: `${position.y}%`,
+                    width: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapCols) * 100}%`,
+                    height: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapRows) * 100}%`,
+                  }}
+                />
+              )}
               <div
                 className="map-character self-character"
                 style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
@@ -494,6 +502,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
         <ProximityVoice
           token={ambient.token}
           serverUrl={ambient.serverUrl}
+          layout={layout}
           selfPosition={position}
           peers={peerPositions}
           micOn={micOn}
