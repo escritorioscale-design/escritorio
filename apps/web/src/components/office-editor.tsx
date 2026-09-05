@@ -4,7 +4,7 @@ import { Lock, LockOpen, Plus, Redo2, Save, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import {
   DEFAULT_OFFICE_LAYOUT, ITEM_KEYS, ROOM_KIND_LABELS,
-  cloneLayout, itemLabel,
+  cloneLayout, furnitureVisual, itemLabel,
   type AvatarDirection, type LayoutFurniture, type LayoutRoom, type OfficeLayout, type RoomKind,
 } from "@/lib/office-layout";
 
@@ -139,12 +139,15 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
           <aside className="office-editor-palette">
             <button className="office-editor-add-room" onClick={addRoom} type="button"><Plus /> Nova sala</button>
             <div className="office-editor-items">
-              {ITEM_KEYS.map((key) => (
-                <button key={key} className="office-editor-item" onClick={() => addFurniture(key)} type="button">
-                  <img src={`/tileset/items/${key}.png`} alt="" />
-                  <span>{itemLabel(key)}</span>
-                </button>
-              ))}
+              {ITEM_KEYS.map((key) => {
+                const visual = furnitureVisual(key);
+                return (
+                  <button key={key} className="office-editor-item" onClick={() => addFurniture(key)} type="button">
+                    <i style={{ background: visual.color, borderRadius: visual.shape === "circle" ? "50%" : 3 }} />
+                    <span>{itemLabel(key)}</span>
+                  </button>
+                );
+              })}
             </div>
           </aside>
 
@@ -293,13 +296,18 @@ function FurnitureIcon({ piece, selected, onSelect, onMove }: {
   onMove: (dx: number, dy: number) => void;
 }) {
   const drag = usePointerDrag(onMove);
-  const size = (piece.scale ?? 1) * PX;
+  const scale = piece.scale ?? 1;
+  const visual = furnitureVisual(piece.key);
   return (
-    <img
-      src={`/tileset/items/${piece.key}.png`}
-      alt=""
+    <div
+      title={piece.key}
       className={`office-editor-furniture ${selected ? "selected" : ""}`}
-      style={{ left: piece.x * PX, top: piece.y * PX, width: size, height: size }}
+      style={{
+        left: piece.x * PX, top: piece.y * PX,
+        width: visual.w * PX * scale, height: visual.h * PX * scale,
+        background: visual.color,
+        borderRadius: visual.shape === "circle" ? "50%" : 3,
+      }}
       onPointerDown={(event) => { onSelect(); drag(event); }}
     />
   );

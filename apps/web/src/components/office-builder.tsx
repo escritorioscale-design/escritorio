@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_OFFICE_LAYOUT, TILE,
-  doorAtBottom, doorX, doorY, findPath,
+  doorAtBottom, doorX, doorY, findPath, furnitureVisual,
   getAllSeats, getFurnitureColliders, getWalls, openDoorsForPosition,
   type AvatarDirection, type LayoutRoom, type OfficeLayout, type Rect,
 } from "@/lib/office-layout";
@@ -230,19 +230,25 @@ export function OfficeBuilder({ layout, occupiedSeatIds, onUpdate, theme, active
               style={{ left: room.x * TILE, top: room.y * TILE, width: room.w * TILE, height: room.h * TILE, background: floorColorFor(room.kind, theme) }}
             />
           ))}
-          {resolvedLayout.furniture.map((piece) => (
-            <img
-              key={piece.id}
-              src={`/tileset/items/${piece.key}.png`}
-              alt=""
-              className="css-office-furniture"
-              style={{
-                left: piece.x * TILE, top: piece.y * TILE,
-                transform: `translate(-50%,-50%) scale(${piece.scale ?? 1})`,
-                zIndex: Math.round(20 + (piece.y / resolvedLayout.mapRows) * 100),
-              }}
-            />
-          ))}
+          {resolvedLayout.furniture.map((piece) => {
+            const visual = furnitureVisual(piece.key);
+            const scale = piece.scale ?? 1;
+            return (
+              <div
+                key={piece.id}
+                className="css-office-furniture"
+                title={piece.key}
+                style={{
+                  left: piece.x * TILE, top: piece.y * TILE,
+                  width: visual.w * TILE * scale, height: visual.h * TILE * scale,
+                  transform: "translate(-50%,-50%)",
+                  background: visual.color,
+                  borderRadius: visual.shape === "circle" ? "50%" : 3,
+                  zIndex: Math.round(20 + (piece.y / resolvedLayout.mapRows) * 100),
+                }}
+              />
+            );
+          })}
           {walls.map((rect, index) => (
             <div key={index} className="css-office-wall" style={{ left: rect.x * TILE, top: rect.y * TILE, width: rect.w * TILE, height: rect.h * TILE, background: wallColor }} />
           ))}

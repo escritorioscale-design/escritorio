@@ -108,6 +108,33 @@ export function defaultFootprint(key: string): { w: number; h: number } | null {
   return FOOTPRINT[key] ?? null;
 }
 
+// Plain shapes instead of drawn sprites — a colored rectangle or circle per
+// item category. Much easier to tweak than pixel art, and keeps the map
+// rendering-agnostic (no image assets to load or keep in sync).
+export type FurnitureVisual = { shape: "rect" | "circle"; color: string; w: number; h: number };
+
+function visualCategory(key: string): { shape: "rect" | "circle"; color: string } {
+  if (key.startsWith("chair")) {
+    return { shape: "circle", color: key.includes("navy") ? "#3b4a63" : key.includes("orange") ? "#c9793b" : "#8a6a4a" };
+  }
+  if (key.startsWith("desk") || key === "table-long") return { shape: "rect", color: "#c9a876" };
+  if (key.startsWith("plant")) return { shape: "circle", color: "#4a8f5c" };
+  if (["cabinet", "bookshelf", "server-rack", "safe", "printer"].includes(key)) return { shape: "rect", color: "#8890a0" };
+  if (["whiteboard", "whiteboard-blank", "corkboard", "wall-art-blue", "wall-art-orange", "clock"].includes(key)) {
+    return { shape: "rect", color: "#e8e4da" };
+  }
+  if (key === "sofa" || key === "pouf") return { shape: "rect", color: "#9c8ac2" };
+  if (key === "rug") return { shape: "rect", color: "#d6c9a8" };
+  return { shape: "rect", color: "#b7aa96" };
+}
+
+export function furnitureVisual(key: string): FurnitureVisual {
+  const category = visualCategory(key);
+  const footprint = FOOTPRINT[key];
+  const size = footprint ?? (category.shape === "circle" ? { w: 0.7, h: 0.7 } : { w: 0.9, h: 0.6 });
+  return { ...category, w: size.w, h: size.h };
+}
+
 export function furnitureCollider(piece: LayoutFurniture): Rect | null {
   if (piece.collides === null) return null;
   if (piece.collides) return piece.collides;
