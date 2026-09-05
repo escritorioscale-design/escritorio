@@ -44,7 +44,7 @@ export async function POST(request: Request) {
           rooms: {
             create: [
               { name: "Sala de reunião geral", kind: "MEETING", x: 4, y: 5, width: 28, height: 30, capacity: 24 },
-              { name: "Sala de criação", kind: "SOCIAL", x: 36, y: 5, width: 28, height: 30, capacity: 12 },
+              { name: "Sala de criação", kind: "SOCIAL", x: 36, y: 5, width: 28, height: 30, capacity: 4 },
               { name: "Sala do gerente", kind: "PROXIMITY", x: 68, y: 5, width: 28, height: 30, capacity: 4, isPrivate: true },
               { name: "Squad 1", kind: "FOCUS", x: 4, y: 44, width: 28, height: 46, capacity: 4 },
               { name: "Squad 2", kind: "FOCUS", x: 36, y: 44, width: 28, height: 46, capacity: 4 },

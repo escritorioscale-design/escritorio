@@ -27,7 +27,7 @@ import {
   type AvatarAppearance,
 } from "@/lib/avatar";
 
-type RoomData = { id: string; name: string; kind: string; x: number; y: number; width: number; height: number };
+type RoomData = { id: string; name: string; kind: string; x: number; y: number; width: number; height: number; capacity?: number | null };
 type Presence = {
   userId: string;
   name: string;
@@ -448,6 +448,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             walkTo(((event.clientX - rect.left) / rect.width) * 100, ((event.clientY - rect.top) / rect.height) * 100);
           }}>
             <div className="map-dots" />
+            <div className="map-corridor" aria-hidden="true"><span>corredor principal · área de convivência</span></div>
             {decorationsVisible && <>
               <div className="map-decor decor-window decor-window-a" aria-hidden="true" />
               <div className="map-decor decor-window decor-window-b" aria-hidden="true" />
@@ -460,7 +461,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 className={`map-room room-${room.kind.toLowerCase()}`}
                 style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%`, background: palette[room.kind] }}
               >
-                <span className="map-room-title">{room.name}</span>
+                <div className="map-room-title"><strong>{room.name}</strong><small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small></div>
                 {room.kind === "SOCIAL" && (room.name.toLowerCase().includes("cria") ? <div className="room-art creative-team-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}<strong /></div> : <div className="room-art social-art"><i /><i /><i /></div>)}
                 {room.kind === "FOCUS" && <div className="room-art squad-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}</div>}
                 {room.kind === "MEETING" && <button className="room-art meeting-art" onClick={(event) => { event.stopPropagation(); joinCall(room); }}><span /><em><Video /> Entrar</em></button>}
@@ -497,7 +498,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
           <aside className="people-panel">
             <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
             <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Sala geral · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
-            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>3 squads · 4 cadeiras cada</strong><p>Sala geral, criação e gerência ficam no corredor superior.</p></section>
+            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>3 squads + criação · 4 posições cada</strong><p>Sala geral, criação e gerência ficam no corredor superior.</p></section>
             {mediaError && <p className="media-error">{mediaError}</p>}
             <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>
             {nearby.length ? nearby.map((person) => (
