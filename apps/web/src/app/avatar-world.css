@@ -29,11 +29,22 @@
 .hair-curls .avatar-hair { left: 1px; top: 0; width: 6px; height: 6px; border-radius: 50%; box-shadow: -3px 2px var(--avatar-hair),3px -3px var(--avatar-hair),8px -3px var(--avatar-hair),13px -1px var(--avatar-hair),16px 3px var(--avatar-hair),-2px 7px var(--avatar-hair),17px 8px var(--avatar-hair); }
 .hair-bun .avatar-hair { height: 10px; }
 .hair-bun .avatar-hair::before { content: ""; position: absolute; left: 6px; top: -7px; width: 10px; height: 10px; border-radius: 50%; background: var(--avatar-hair); box-shadow: inset 0 -2px rgba(255,255,255,.08); }
+.hair-long .avatar-hair { height: 9px; }
+.hair-long .avatar-hair::before,.hair-long .avatar-hair::after { content: ""; position: absolute; top: 5px; width: 6px; height: 26px; border-radius: 0 0 6px 6px; background: var(--avatar-hair); }
+.hair-long .avatar-hair::before { left: -2px; }.hair-long .avatar-hair::after { right: -2px; }
+.hair-ponytail .avatar-hair::after { content: ""; position: absolute; right: -5px; top: 2px; width: 6px; height: 20px; border-radius: 0 4px 6px 6px; background: var(--avatar-hair); transform: rotate(8deg); }
+.hair-mohawk .avatar-hair { left: 8px; width: 5px; height: 6px; border-radius: 3px; }
+.hair-mohawk .avatar-hair::before { content: ""; position: absolute; left: 0; top: -6px; width: 5px; height: 8px; border-radius: 3px 3px 0 0; background: var(--avatar-hair); }
+.hair-mohawk .avatar-hair::after { content: ""; position: absolute; left: 0; top: 4px; width: 5px; height: 6px; background: var(--avatar-hair); }
+.hair-afro .avatar-hair { left: -4px; top: -6px; width: 29px; height: 29px; border-radius: 50%; box-shadow: inset 0 -3px rgba(255,255,255,.08); }
+.hair-spiky .avatar-hair { height: 11px; clip-path: polygon(0% 100%,8% 25%,18% 100%,28% 15%,38% 100%,50% 10%,62% 100%,72% 15%,82% 100%,92% 25%,100% 100%); }
+.hair-bald .avatar-hair,.hair-bald .avatar-hair::before,.hair-bald .avatar-hair::after { display: none; }
 .avatar-face { position: absolute; z-index: 4; inset: 0; }
 .avatar-face i { position: absolute; top: 11px; width: 2px; height: 3px; border-radius: 2px; background: #2b211d; }
 .avatar-face i:first-child { left: 5px; }.avatar-face i:nth-child(2) { right: 5px; }
 .avatar-face b { position: absolute; left: 8px; top: 17px; width: 5px; height: 2px; border-bottom: 1px solid rgba(90,38,35,.7); border-radius: 50%; }
-.avatar-glasses,.avatar-headphones { display: none; position: absolute; z-index: 8; inset: 0; }
+.avatar-glasses,.avatar-headphones,.avatar-hat,.avatar-earrings,.avatar-bowtie { display: none; }
+.avatar-glasses,.avatar-headphones,.avatar-hat { position: absolute; z-index: 8; inset: 0; }
 .accessory-glasses .avatar-glasses { display: block; }
 .avatar-glasses i { position: absolute; top: 9px; width: 8px; height: 6px; border: 1.5px solid #302d31; border-radius: 3px; background: rgba(180,220,235,.18); }
 .avatar-glasses i:first-child { left: 2px; }.avatar-glasses i:last-child { right: 2px; }
@@ -42,14 +53,34 @@
 .avatar-headphones::before { content: ""; position: absolute; left: -3px; top: 3px; width: 23px; height: 13px; border: 2px solid #292a31; border-bottom: 0; border-radius: 12px 12px 0 0; }
 .avatar-headphones i { position: absolute; top: 9px; width: 5px; height: 9px; border-radius: 3px; background: #292a31; }
 .avatar-headphones i:first-child { left: -4px; }.avatar-headphones i:last-child { right: -4px; }
+.accessory-hat .avatar-hat { display: block; }
+.avatar-hat::before { content: ""; position: absolute; left: -2px; top: -6px; width: 25px; height: 11px; border-radius: 9px 9px 3px 3px; background: #d24b4b; box-shadow: inset 0 -3px rgba(0,0,0,.12); }
+.avatar-hat::after { content: ""; position: absolute; left: -4px; top: 2px; width: 29px; height: 4px; border-radius: 3px; background: #b93d3d; }
+.accessory-earrings .avatar-earrings { display: block; position: absolute; z-index: 7; inset: 0; }
+.avatar-earrings::before,.avatar-earrings::after { content: ""; position: absolute; top: 13px; width: 3px; height: 3px; border-radius: 50%; background: #e8c542; box-shadow: 0 2px #e8c542; }
+.avatar-earrings::before { left: -2px; }.avatar-earrings::after { right: -2px; }
+.accessory-bowtie .avatar-bowtie { display: block; position: absolute; z-index: 5; left: 16px; top: 19px; width: 10px; height: 6px; }
+.avatar-bowtie::before,.avatar-bowtie::after { content: ""; position: absolute; top: 0; width: 5px; height: 6px; background: #d0384b; clip-path: polygon(0 0,100% 20%,100% 80%,0 100%); }
+.avatar-bowtie::before { left: 0; }
+.avatar-bowtie::after { right: 0; clip-path: polygon(100% 0,0 20%,0 80%,100% 100%); }
 .avatar-torso { position: absolute; z-index: 4; left: 8px; top: 20px; width: 26px; height: 25px; border: 1px solid rgba(22,22,25,.14); border-radius: 7px 7px 5px 5px; background: var(--avatar-top); box-shadow: inset 0 -4px rgba(20,20,30,.1); }
 .avatar-torso i { position: absolute; left: 7px; top: 5px; width: 12px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.24); }
 .avatar-arm { position: absolute; z-index: 3; top: 22px; width: 8px; height: 24px; border-radius: 6px; background: var(--avatar-top); transform-origin: 50% 3px; }
 .avatar-arm i { position: absolute; left: 1px; bottom: -2px; width: 6px; height: 8px; border-radius: 4px; background: var(--avatar-skin); }
 .avatar-arm-left { left: 4px; transform: rotate(7deg); }.avatar-arm-right { right: 4px; transform: rotate(-7deg); }
+.top-hoodie .avatar-torso::before { content: ""; position: absolute; left: 3px; top: -7px; width: 20px; height: 11px; border-radius: 11px 11px 3px 3px; background: var(--avatar-top); box-shadow: inset 0 -3px rgba(0,0,0,.12); }
+.top-hoodie .avatar-torso::after { content: ""; position: absolute; left: 11px; top: 12px; width: 4px; height: 7px; border-radius: 0 0 3px 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.16); }
+.top-jacket .avatar-torso::before { content: ""; position: absolute; left: 9px; top: -1px; width: 8px; height: 11px; background: #f2efe6; clip-path: polygon(0 0,100% 0,50% 100%); }
+.top-jacket .avatar-torso::after { content: ""; position: absolute; left: 12px; top: 12px; width: 2px; height: 2px; border-radius: 50%; background: rgba(0,0,0,.22); box-shadow: 0 5px rgba(0,0,0,.22); }
+.top-blazer .avatar-torso::before { content: ""; position: absolute; left: 9px; top: -1px; width: 8px; height: 13px; background: #f2efe6; clip-path: polygon(0 0,100% 0,50% 100%); }
+.top-blazer .avatar-torso::after { content: ""; position: absolute; left: 5px; top: 6px; width: 6px; height: 5px; border-radius: 1px; background: rgba(255,255,255,.2); }
 .avatar-leg { position: absolute; z-index: 2; top: 41px; width: 10px; height: 18px; border-radius: 0 0 5px 5px; background: var(--avatar-bottom); transform-origin: 50% 2px; box-shadow: inset 0 -3px rgba(0,0,0,.08); }
 .avatar-leg-left { left: 10px; }.avatar-leg-right { right: 10px; }
 .avatar-leg i { position: absolute; left: -1px; bottom: -1px; width: 12px; height: 6px; border: 1px solid rgba(30,30,30,.12); border-radius: 4px 5px 3px 3px; background: var(--avatar-shoes); }
+.bottom-shorts .avatar-leg,.bottom-skirt .avatar-leg { background: var(--avatar-skin); box-shadow: none; }
+.bottom-shorts .avatar-leg::before { content: ""; position: absolute; left: 0; top: 0; width: 10px; height: 8px; border-radius: 0 0 4px 4px; background: var(--avatar-bottom); box-shadow: inset 0 -2px rgba(0,0,0,.1); }
+.bottom-skirt .avatar-leg::before { content: ""; position: absolute; left: 0; top: 0; width: 10px; height: 4px; background: var(--avatar-bottom); }
+.bottom-skirt .avatar-torso::after { content: ""; position: absolute; left: 1px; top: 24px; width: 24px; height: 13px; clip-path: polygon(12% 0,88% 0,100% 100%,0 100%); background: var(--avatar-bottom); border-radius: 0 0 4px 4px; box-shadow: inset 0 -2px rgba(0,0,0,.1); }
 .direction-up .avatar-face { display: none; }.direction-up .avatar-hair { height: 12px; }.direction-up .avatar-torso i { display: none; }
 .direction-left .avatar-head { transform: translateX(-2px); }.direction-left .avatar-face i:nth-child(2),.direction-left .avatar-face b { display: none; }.direction-left .avatar-face i:first-child { left: 3px; }
 .direction-right .avatar-head { transform: translateX(2px) scaleX(-1); }.direction-right .avatar-face i:nth-child(2),.direction-right .avatar-face b { display: none; }.direction-right .avatar-face i:first-child { left: 3px; }
@@ -93,6 +124,26 @@
 .avatar-editor>footer { display: flex; justify-content: flex-end; gap: 9px; padding: 16px 27px; border-top: 1px solid var(--line); background: #fafaf7; }.avatar-editor>footer button { height: 39px; padding: 0 15px; border-radius: 9px; font-size: 10px; font-weight: 800; cursor: pointer; }.avatar-cancel { border: 1px solid #ddd; background: white; }.avatar-save { display: flex; align-items: center; gap: 6px; border: 0; background: #1d1d19; color: white; }.avatar-save svg { width: 14px; }.avatar-save:disabled { opacity: .6; cursor: wait; }
 .avatar-save-error { margin: 0; padding: 9px 27px; background: #fff0f0; color: #ad3a3d; font-size: 10px; }
 
+/* Furniture for the organized six-room office layout. */
+.squad-art { inset: 26% 10% 9%; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 11% 18%; }
+.squad-art i { position: relative; min-width: 0; border: 4px solid #967a60; border-radius: 4px; background: #c3a17a; box-shadow: 3px 4px rgba(73,54,38,.16); }
+.squad-art i::before { content: ""; position: absolute; left: 27%; top: 12%; width: 46%; height: 36%; border: 3px solid #4f575a; border-radius: 3px; background: #7d898c; box-shadow: inset 0 -4px rgba(255,255,255,.12); }
+.squad-art i b { position: absolute; left: 29%; bottom: -11px; width: 42%; height: 8px; border-radius: 50%; background: #7257e8; box-shadow: 0 2px rgba(55,39,128,.28); }
+.creative-art { inset: 24% 11% 12%; }
+.creative-art i { position: absolute; border: 4px solid #8f735b; border-radius: 5px; background: #d6a873; box-shadow: 3px 4px rgba(73,54,38,.16); }
+.creative-art i:first-child { left: 4%; top: 10%; width: 55%; height: 25%; transform: rotate(-5deg); }
+.creative-art i:nth-child(2) { right: 2%; bottom: 12%; width: 56%; height: 25%; transform: rotate(6deg); }
+.creative-art i::after { content: ""; position: absolute; left: 13%; top: 22%; width: 16%; height: 19%; border-radius: 50%; background: #f06767; box-shadow: 18px 3px #62b9a8, 36px -1px #f2d65d; }
+.creative-art b { position: absolute; right: 10%; top: 4%; width: 20%; height: 28%; border: 4px solid #756e63; border-radius: 4px; background: linear-gradient(135deg, #e98b86 0 35%, #69b9af 36% 66%, #f0d064 67%); box-shadow: 3px 4px rgba(73,54,38,.12); }
+.manager-art { inset: 25% 12% 10%; }
+.manager-art i { position: absolute; left: 16%; top: 23%; width: 68%; height: 34%; border: 5px solid #7f6047; border-radius: 7px; background: #bd9265; box-shadow: 3px 4px rgba(73,54,38,.18); }
+.manager-art i::before { content: ""; position: absolute; left: 32%; top: 16%; width: 36%; height: 42%; border: 3px solid #4f575a; border-radius: 3px; background: #7d898c; }
+.manager-art b { position: absolute; left: 39%; bottom: 0; width: 22%; height: 19%; border: 4px solid #705d81; border-radius: 50%; background: #a88bb0; box-shadow: 0 2px rgba(55,39,128,.18); }
+.office-plan { margin: 0 0 18px; padding: 12px 13px; border: 1px solid #e2e2da; border-radius: 12px; background: linear-gradient(145deg,#f7f7f1,#fff); }
+.office-plan span { display: block; color: #7058db; font-size: 8px; font-weight: 800; letter-spacing: .12em; }
+.office-plan strong { display: block; margin-top: 4px; color: #292923; font: 800 11px Manrope; }
+.office-plan p { margin: 4px 0 0; color: #898a81; font-size: 9px; line-height: 1.45; }
+
 @media(max-width:700px) {
   .office-actions .customize { display: flex !important; width: 38px; padding: 0; font-size: 0; }
   .map-character { transform: translate(-50%,-83%) scale(.83); }
@@ -100,4 +151,5 @@
   .avatar-editor-backdrop { padding: 0; align-items: end; }.avatar-editor { max-height: 92dvh; border-radius: 20px 20px 0 0; }.avatar-editor>header { padding: 20px; }
   .avatar-editor-content { display: block; overflow-y: auto; }.avatar-preview-stage { min-height: 235px; border-right: 0; border-bottom: 1px solid var(--line); }.avatar-preview-stage>.avatar-character { margin: 45px 0 33px; transform: scale(1.8); }
   .avatar-controls { overflow: visible; grid-template-columns: 1fr; padding: 22px 20px 28px; }.avatar-editor>footer { padding: 13px 20px; }
+  .office-plan { display: none; }
 }

@@ -16,11 +16,13 @@ import { signOut } from "@/lib/auth-client";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BOTTOM_COLORS,
+  AVATAR_BOTTOM_STYLES,
   AVATAR_HAIR_COLORS,
   AVATAR_HAIR_STYLES,
   AVATAR_SHOE_COLORS,
   AVATAR_SKIN_TONES,
   AVATAR_TOP_COLORS,
+  AVATAR_TOP_STYLES,
   normalizeAvatar,
   type AvatarAppearance,
 } from "@/lib/avatar";
@@ -57,11 +59,18 @@ const movementKeys: Record<string, Point> = {
   arrowleft: { x: -1, y: 0 }, a: { x: -1, y: 0 },
   arrowright: { x: 1, y: 0 }, d: { x: 1, y: 0 },
 };
-const hairLabels: Record<AvatarAppearance["hairStyle"], string> = {
+const hairLabels: Record<(typeof AVATAR_HAIR_STYLES)[number], string> = {
   short: "Curto", bob: "Bob", curls: "Cachos", bun: "Coque",
+  long: "Longo", ponytail: "Rabo de cavalo", mohawk: "Moicano", afro: "Black power", spiky: "Espetado", bald: "Careca",
 };
-const accessoryLabels: Record<AvatarAppearance["accessory"], string> = {
-  none: "Nenhum", glasses: "Óculos", headphones: "Headset",
+const topStyleLabels: Record<AvatarAppearance["topStyle"], string> = {
+  tshirt: "Camiseta", hoodie: "Moletom", jacket: "Jaqueta", blazer: "Blazer",
+};
+const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
+  pants: "Calça", shorts: "Shorts", skirt: "Saia",
+};
+const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
+  glasses: "Óculos", headphones: "Headset", hat: "Boné", bowtie: "Gravata", earrings: "Brincos",
 };
 
 function getObstacles(rooms: RoomData[]): Obstacle[] {
@@ -80,10 +89,10 @@ function getObstacles(rooms: RoomData[]): Obstacle[] {
       ];
     }
     if (room.kind === "FOCUS") {
-      return Array.from({ length: 6 }, (_, index) => ({
-        x: room.x + room.width * (.09 + (index % 3) * .29),
-        y: room.y + room.height * (.31 + Math.floor(index / 3) * .38),
-        width: room.width * .2,
+      return Array.from({ length: 4 }, (_, index) => ({
+        x: room.x + room.width * (.12 + (index % 2) * .48),
+        y: room.y + room.height * (.31 + Math.floor(index / 2) * .38),
+        width: room.width * .3,
         height: room.height * .16,
       }));
     }
@@ -420,10 +429,10 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%`, background: palette[room.kind] }}
               >
                 <span className="map-room-title">{room.name}</span>
-                {room.kind === "SOCIAL" && <div className="room-art social-art"><i /><i /><i /></div>}
-                {room.kind === "FOCUS" && <div className="room-art desk-art">{[1, 2, 3, 4, 5, 6].map((number) => <i key={number} />)}</div>}
+                {room.kind === "SOCIAL" && (room.name.toLowerCase().includes("cria") ? <div className="room-art creative-art"><i /><i /><b /></div> : <div className="room-art social-art"><i /><i /><i /></div>)}
+                {room.kind === "FOCUS" && <div className="room-art squad-art">{[1, 2, 3, 4].map((number) => <i key={number}><b /></i>)}</div>}
                 {room.kind === "MEETING" && <button className="room-art meeting-art" onClick={(event) => { event.stopPropagation(); joinCall(room); }}><span /><em><Video /> Entrar</em></button>}
-                {room.kind === "PROXIMITY" && <div className="room-art garden-art"><i>✦</i><i>✿</i><i>✦</i></div>}
+                {room.kind === "PROXIMITY" && (room.name.toLowerCase().includes("gerente") ? <div className="room-art manager-art"><i /><b /></div> : <div className="room-art garden-art"><i>✦</i><i>✿</i><i>✦</i></div>)}
               </div>
             ))}
 
@@ -455,7 +464,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
 
           <aside className="people-panel">
             <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
-            <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Sala Aurora · até 16 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
+            <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Sala geral · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
+            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>3 squads · 4 cadeiras cada</strong><p>Sala geral, criação e gerência ficam no corredor superior.</p></section>
             {mediaError && <p className="media-error">{mediaError}</p>}
             <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>
             {nearby.length ? nearby.map((person) => (
@@ -493,10 +503,12 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 <AvatarSwatches label="Tom de pele" values={AVATAR_SKIN_TONES} value={draftAvatar.skinTone} onChange={(skinTone) => setDraftAvatar((current) => ({ ...current, skinTone: skinTone as AvatarAppearance["skinTone"] }))} />
                 <fieldset className="avatar-fieldset"><legend>Cabelo</legend><div className="avatar-choice-grid">{AVATAR_HAIR_STYLES.map((hairStyle) => <button type="button" key={hairStyle} className={draftAvatar.hairStyle === hairStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, hairStyle }))}>{hairLabels[hairStyle]}</button>)}</div></fieldset>
                 <AvatarSwatches label="Cor do cabelo" values={AVATAR_HAIR_COLORS} value={draftAvatar.hairColor} onChange={(hairColor) => setDraftAvatar((current) => ({ ...current, hairColor: hairColor as AvatarAppearance["hairColor"] }))} />
-                <AvatarSwatches label="Camiseta" values={AVATAR_TOP_COLORS} value={draftAvatar.topColor} onChange={(topColor) => setDraftAvatar((current) => ({ ...current, topColor: topColor as AvatarAppearance["topColor"] }))} />
-                <AvatarSwatches label="Calça" values={AVATAR_BOTTOM_COLORS} value={draftAvatar.bottomColor} onChange={(bottomColor) => setDraftAvatar((current) => ({ ...current, bottomColor: bottomColor as AvatarAppearance["bottomColor"] }))} />
+                <fieldset className="avatar-fieldset"><legend>Estilo da blusa</legend><div className="avatar-choice-grid">{AVATAR_TOP_STYLES.map((topStyle) => <button type="button" key={topStyle} className={draftAvatar.topStyle === topStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, topStyle }))}>{topStyleLabels[topStyle]}</button>)}</div></fieldset>
+                <AvatarSwatches label="Cor da blusa" values={AVATAR_TOP_COLORS} value={draftAvatar.topColor} onChange={(topColor) => setDraftAvatar((current) => ({ ...current, topColor: topColor as AvatarAppearance["topColor"] }))} />
+                <fieldset className="avatar-fieldset"><legend>Estilo da calça</legend><div className="avatar-choice-grid">{AVATAR_BOTTOM_STYLES.map((bottomStyle) => <button type="button" key={bottomStyle} className={draftAvatar.bottomStyle === bottomStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bottomStyle }))}>{bottomStyleLabels[bottomStyle]}</button>)}</div></fieldset>
+                <AvatarSwatches label="Cor da calça" values={AVATAR_BOTTOM_COLORS} value={draftAvatar.bottomColor} onChange={(bottomColor) => setDraftAvatar((current) => ({ ...current, bottomColor: bottomColor as AvatarAppearance["bottomColor"] }))} />
                 <AvatarSwatches label="Sapatos" values={AVATAR_SHOE_COLORS} value={draftAvatar.shoeColor} onChange={(shoeColor) => setDraftAvatar((current) => ({ ...current, shoeColor: shoeColor as AvatarAppearance["shoeColor"] }))} />
-                <fieldset className="avatar-fieldset"><legend>Acessório</legend><div className="avatar-choice-grid">{AVATAR_ACCESSORIES.map((accessory) => <button type="button" key={accessory} className={draftAvatar.accessory === accessory ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, accessory }))}>{accessoryLabels[accessory]}</button>)}</div></fieldset>
+                <fieldset className="avatar-fieldset"><legend>Acessórios</legend><div className="avatar-choice-grid">{AVATAR_ACCESSORIES.map((accessory) => <button type="button" key={accessory} className={draftAvatar.accessories.includes(accessory) ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, accessories: current.accessories.includes(accessory) ? current.accessories.filter((item) => item !== accessory) : [...current.accessories, accessory] }))}>{accessoryLabels[accessory]}</button>)}</div></fieldset>
               </div>
             </div>
             {avatarError && <p className="avatar-save-error">{avatarError}</p>}

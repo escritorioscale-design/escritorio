@@ -5,21 +5,25 @@ import { auth } from "@/lib/auth";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BOTTOM_COLORS,
+  AVATAR_BOTTOM_STYLES,
   AVATAR_HAIR_COLORS,
   AVATAR_HAIR_STYLES,
   AVATAR_SHOE_COLORS,
   AVATAR_SKIN_TONES,
   AVATAR_TOP_COLORS,
+  AVATAR_TOP_STYLES,
 } from "@/lib/avatar";
 
 const avatarSchema = z.object({
   skinTone: z.enum(AVATAR_SKIN_TONES),
   hairStyle: z.enum(AVATAR_HAIR_STYLES),
   hairColor: z.enum(AVATAR_HAIR_COLORS),
+  topStyle: z.enum(AVATAR_TOP_STYLES),
   topColor: z.enum(AVATAR_TOP_COLORS),
+  bottomStyle: z.enum(AVATAR_BOTTOM_STYLES),
   bottomColor: z.enum(AVATAR_BOTTOM_COLORS),
   shoeColor: z.enum(AVATAR_SHOE_COLORS),
-  accessory: z.enum(AVATAR_ACCESSORIES),
+  accessories: z.array(z.enum(AVATAR_ACCESSORIES)).max(AVATAR_ACCESSORIES.length),
 }).strict();
 
 export async function PUT(request: Request) {

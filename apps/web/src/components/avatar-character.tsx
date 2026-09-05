@@ -26,10 +26,11 @@ export function AvatarCharacter({ appearance, direction = "down", moving = false
     "--avatar-bottom": appearance.bottomColor,
     "--avatar-shoes": appearance.shoeColor,
   };
+  const accessoryClasses = appearance.accessories.map((accessory) => `accessory-${accessory}`).join(" ");
 
   return (
     <div
-      className={`avatar-character direction-${direction} hair-${appearance.hairStyle} accessory-${appearance.accessory}${moving ? " is-walking" : ""}${compact ? " is-compact" : ""}`}
+      className={`avatar-character direction-${direction} hair-${appearance.hairStyle} top-${appearance.topStyle} bottom-${appearance.bottomStyle} ${accessoryClasses}${moving ? " is-walking" : ""}${compact ? " is-compact" : ""}`}
       style={style}
       aria-hidden="true"
     >
@@ -40,12 +41,15 @@ export function AvatarCharacter({ appearance, direction = "down", moving = false
         <div className="avatar-arm avatar-arm-left"><i /></div>
         <div className="avatar-arm avatar-arm-right"><i /></div>
         <div className="avatar-torso"><i /></div>
+        <span className="avatar-bowtie" />
         <div className="avatar-head">
           <span className="avatar-ear" />
+          <span className="avatar-earrings" />
           <span className="avatar-hair" />
           <span className="avatar-face"><i /><i /><b /></span>
           <span className="avatar-glasses"><i /><i /></span>
           <span className="avatar-headphones"><i /><i /></span>
+          <span className="avatar-hat" />
         </div>
       </div>
     </div>

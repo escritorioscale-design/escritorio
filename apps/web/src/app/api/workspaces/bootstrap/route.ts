@@ -39,13 +39,16 @@ export async function POST(request: Request) {
         create: {
           name: "Escritório principal",
           isDefault: true,
-          mapData: { version: 1, theme: "orbit", width: 1600, height: 900 },
+          mapVersion: 2,
+          mapData: { version: 2, theme: "orbit", width: 1600, height: 900, layout: "six-room-grid" },
           rooms: {
             create: [
-              { name: "Lounge", kind: "SOCIAL", x: 4, y: 6, width: 39, height: 38, capacity: 12 },
-              { name: "Zona de foco", kind: "FOCUS", x: 4, y: 53, width: 39, height: 41, capacity: 8 },
-              { name: "Sala Aurora", kind: "MEETING", x: 55, y: 6, width: 41, height: 45, capacity: 16 },
-              { name: "Jardim", kind: "PROXIMITY", x: 55, y: 59, width: 41, height: 35, capacity: 10 },
+              { name: "Sala de reunião geral", kind: "MEETING", x: 4, y: 5, width: 28, height: 30, capacity: 24 },
+              { name: "Sala de criação", kind: "SOCIAL", x: 36, y: 5, width: 28, height: 30, capacity: 12 },
+              { name: "Sala do gerente", kind: "PROXIMITY", x: 68, y: 5, width: 28, height: 30, capacity: 4, isPrivate: true },
+              { name: "Squad 1", kind: "FOCUS", x: 4, y: 44, width: 28, height: 46, capacity: 4 },
+              { name: "Squad 2", kind: "FOCUS", x: 36, y: 44, width: 28, height: 46, capacity: 4 },
+              { name: "Squad 3", kind: "FOCUS", x: 68, y: 44, width: 28, height: 46, capacity: 4 },
             ],
           },
         },
