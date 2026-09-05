@@ -6,16 +6,18 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, CalendarDays, Check, ChevronDown, Grid2X2, Headphones, Lock, LogOut, MessageSquare,
-  Mic, Palette, Plus, Search, Settings, Sparkles, Users, Video, Volume2, X,
+  Bell, CalendarDays, Check, ChevronDown, Grid2X2, LogOut, MessageSquare,
+  Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
 import { InviteModal } from "@/components/invite-modal";
-import { OfficeGame, type LocalMoveState } from "@/components/office-game";
+import { ModernOfficePreview, type LocalMoveState } from "@/components/modern-office-preview";
+import { ProximityVoice, PROXIMITY_SILENT_TILES, tileDistance } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
-import { MAP_COLS, MAP_ROWS, ROOMS as TILE_ROOMS, type TileRoom } from "@/lib/office-map";
+import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
+import { MAP_COLS, MAP_ROWS } from "@/lib/modern-office-map";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -56,19 +58,6 @@ type Props = {
 };
 
 type OfficeTheme = "day" | "neon" | "studio";
-
-function roomIcon(room: TileRoom) {
-  if (room.kind === "MEETING") return <Video />;
-  if (room.kind === "PROXIMITY") return <Lock />;
-  if (room.kind === "SOCIAL") return <Sparkles />;
-  return <Headphones />;
-}
-
-function roomLabel(room: TileRoom) {
-  if (room.kind === "FOCUS" || room.kind === "SOCIAL") return "4 posições de trabalho";
-  if (room.kind === "MEETING") return "Até 24 participantes";
-  return "Sala reservada";
-}
 
 const bodyTypeLabels: Record<AvatarAppearance["bodyType"], string> = {
   male: "Masculino", female: "Feminino",
@@ -122,6 +111,9 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
   const [connection, setConnection] = useState<"connecting" | "online" | "offline">("connecting");
   const [media, setMedia] = useState<MediaGrant | null>(null);
   const [mediaError, setMediaError] = useState("");
+  const [ambient, setAmbient] = useState<MediaGrant | null>(null);
+  const [ambientError, setAmbientError] = useState("");
+  const [micOn, setMicOn] = useState(true);
   const [avatar, setAvatar] = useState(user.avatar);
   const [draftAvatar, setDraftAvatar] = useState(user.avatar);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -207,6 +199,26 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
     return () => { cancelled = true; socket?.disconnect(); };
   }, [user.id, workspace.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function connectAmbient() {
+      try {
+        const response = await fetch("/api/livekit/ambient-token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ workspaceId: workspace.id }),
+        });
+        if (!response.ok) throw new Error("token");
+        const grant = await response.json();
+        if (!cancelled) setAmbient(grant);
+      } catch {
+        if (!cancelled) setAmbientError("Voz por proximidade indisponível no momento.");
+      }
+    }
+    connectAmbient();
+    return () => { cancelled = true; };
+  }, [workspace.id]);
+
   const handleLocalUpdate = useCallback((state: LocalMoveState) => {
     const next = { x: state.xPercent, y: state.yPercent };
     positionRef.current = next;
@@ -227,8 +239,12 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
     emitMovement(next, state.direction, state.moving, false, state.sitting, state.seatId);
   }, [emitMovement]);
 
+  const peerPositions = useMemo(
+    () => Object.fromEntries(Object.values(people).map((person) => [person.userId, { x: person.x, y: person.y }])),
+    [people],
+  );
   const nearby = useMemo(
-    () => Object.values(people).filter((person) => Math.hypot(person.x - position.x, person.y - position.y) < 14),
+    () => Object.values(people).filter((person) => tileDistance(position, person) < PROXIMITY_SILENT_TILES),
     [people, position],
   );
   const meetingRoom = rooms.find((room) => room.kind === "MEETING") ?? rooms[0];
@@ -316,37 +332,12 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
 
         <div className="office-content">
           <section className={`map-stage office-theme-${officeTheme}`}>
-            <OfficeGame
+            <ModernOfficePreview
               theme={officeTheme}
               occupiedSeatIds={occupiedSeatIds}
               onUpdate={handleLocalUpdate}
               active={!editorOpen && !officeEditorOpen}
             >
-              {TILE_ROOMS.map((room) => (
-                <div
-                  key={`title-${room.id}`}
-                  className="map-room-title"
-                  style={{ left: `calc(${(room.x / MAP_COLS) * 100}% + 12px)`, top: `calc(${(room.y / MAP_ROWS) * 100}% + 10px)` }}
-                >
-                  <span className="office-room-icon">{roomIcon(room)}</span>
-                  <div>
-                    <strong>{room.name}</strong>
-                    <small>{roomLabel(room)}</small>
-                  </div>
-                </div>
-              ))}
-              {TILE_ROOMS.filter((room) => room.kind === "MEETING").map((room) => (
-                <button
-                  key={`meeting-${room.id}`}
-                  className="map-meeting-hit"
-                  style={{
-                    left: `${(room.x / MAP_COLS) * 100}%`, top: `${(room.y / MAP_ROWS) * 100}%`,
-                    width: `${(room.w / MAP_COLS) * 100}%`, height: `${(room.h / MAP_ROWS) * 100}%`,
-                  }}
-                  onClick={() => joinCall(meetingRoom)}
-                  aria-label="Entrar na sala de reunião"
-                />
-              ))}
               {Object.values(people).map((person) => (
                 <div
                   className="map-character remote-character"
@@ -358,7 +349,14 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                   <label>{person.name}</label>
                 </div>
               ))}
-              <div className="proximity-zone" style={{ left: `${position.x}%`, top: `${position.y}%` }} />
+              <div
+                className="proximity-zone"
+                style={{
+                  left: `${position.x}%`, top: `${position.y}%`,
+                  width: `${((PROXIMITY_SILENT_TILES * 2) / MAP_COLS) * 100}%`,
+                  height: `${((PROXIMITY_SILENT_TILES * 2) / MAP_ROWS) * 100}%`,
+                }}
+              />
               <div
                 className="map-character self-character"
                 style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
@@ -367,25 +365,35 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 <AvatarCharacter appearance={avatar} direction={direction} moving={moving} sitting={sitting} />
                 <label>Você</label>
               </div>
-            </OfficeGame>
+            </ModernOfficePreview>
             <div className="movement-help"><span>WASD</span><span>↑ ↓ ← →</span><b>ou clique para andar</b></div>
             <div className={`connection-pill ${connection}`}>
               {connection === "online" ? "Tempo real conectado" : connection === "connecting" ? "Conectando…" : "Modo offline"}
             </div>
+            <button
+              type="button"
+              className={`mic-toggle ${micOn ? "on" : "off"}`}
+              onClick={() => setMicOn((current) => !current)}
+              aria-pressed={micOn}
+              aria-label={micOn ? "Silenciar microfone" : "Ativar microfone"}
+            >
+              <Mic /> {micOn ? "Voz por proximidade ativa" : "Microfone mudo"}
+            </button>
           </section>
 
           <aside className="people-panel">
             <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
-            <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Sala geral · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
-            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>3 squads + criação · 4 posições cada</strong><p>Sala geral, criação e gerência ficam no corredor superior.</p></section>
+            <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Auditório · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
+            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>4 squads · cada um com sala de reunião própria</strong><p>Auditório e diretoria (2 diretores) ficam no corredor superior.</p></section>
             {mediaError && <p className="media-error">{mediaError}</p>}
+            {ambientError && <p className="media-error">{ambientError}</p>}
             <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>
             {nearby.length ? nearby.map((person) => (
               <button className="person-row" key={person.userId} onClick={() => joinCall()}>
                 <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
-                <div><strong>{person.name}</strong><small>Próximo de você</small></div><Mic />
+                <div><strong>{person.name}</strong><small>Você já pode ouvir</small></div><Mic />
               </button>
-            )) : <div className="nearby-empty"><Users /><p>Aproxime-se de alguém no mapa para iniciar uma conversa.</p></div>}
+            )) : <div className="nearby-empty"><Users /><p>Aproxime-se de alguém no mapa para conversar por voz.</p></div>}
             <div className="people-heading"><span>NO ESCRITÓRIO</span><b>{Object.keys(people).length + 1}</b></div>
             <div className="person-row me-row">
               <span className="person-avatar"><AvatarCharacter appearance={avatar} compact /></span>
@@ -412,16 +420,27 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 <strong>{user.name}</strong><span>Prévia em tempo real</span>
               </div>
               <div className="avatar-controls">
-                <fieldset className="avatar-fieldset"><legend>Corpo</legend><div className="avatar-choice-grid">{AVATAR_BODY_TYPES.map((bodyType) => <button type="button" key={bodyType} className={draftAvatar.bodyType === bodyType ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bodyType }))}>{bodyTypeLabels[bodyType]}</button>)}</div></fieldset>
-                <AvatarSwatches label="Tom de pele" values={AVATAR_SKIN_TONES} value={draftAvatar.skinTone} onChange={(skinTone) => setDraftAvatar((current) => ({ ...current, skinTone: skinTone as AvatarAppearance["skinTone"] }))} />
-                <fieldset className="avatar-fieldset"><legend>Cabelo</legend><div className="avatar-choice-grid">{AVATAR_HAIR_STYLES.map((hairStyle) => <button type="button" key={hairStyle} className={draftAvatar.hairStyle === hairStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, hairStyle }))}>{hairLabels[hairStyle]}</button>)}</div></fieldset>
-                <AvatarSwatches label="Cor do cabelo" values={AVATAR_HAIR_COLORS} value={draftAvatar.hairColor} onChange={(hairColor) => setDraftAvatar((current) => ({ ...current, hairColor: hairColor as AvatarAppearance["hairColor"] }))} />
-                <fieldset className="avatar-fieldset"><legend>Estilo da blusa</legend><div className="avatar-choice-grid">{AVATAR_TOP_STYLES.map((topStyle) => <button type="button" key={topStyle} className={draftAvatar.topStyle === topStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, topStyle }))}>{topStyleLabels[topStyle]}</button>)}</div></fieldset>
-                <AvatarSwatches label="Cor da blusa" values={AVATAR_TOP_COLORS} value={draftAvatar.topColor} onChange={(topColor) => setDraftAvatar((current) => ({ ...current, topColor: topColor as AvatarAppearance["topColor"] }))} />
-                <fieldset className="avatar-fieldset"><legend>Estilo da calça</legend><div className="avatar-choice-grid">{AVATAR_BOTTOM_STYLES.map((bottomStyle) => <button type="button" key={bottomStyle} className={draftAvatar.bottomStyle === bottomStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bottomStyle }))}>{bottomStyleLabels[bottomStyle]}</button>)}</div></fieldset>
-                <AvatarSwatches label="Cor da calça" values={AVATAR_BOTTOM_COLORS} value={draftAvatar.bottomColor} onChange={(bottomColor) => setDraftAvatar((current) => ({ ...current, bottomColor: bottomColor as AvatarAppearance["bottomColor"] }))} />
-                <AvatarSwatches label="Sapatos" values={AVATAR_SHOE_COLORS} value={draftAvatar.shoeColor} onChange={(shoeColor) => setDraftAvatar((current) => ({ ...current, shoeColor: shoeColor as AvatarAppearance["shoeColor"] }))} />
-                <fieldset className="avatar-fieldset"><legend>Acessórios</legend><div className="avatar-choice-grid">{AVATAR_ACCESSORIES.map((accessory) => <button type="button" key={accessory} className={draftAvatar.accessories.includes(accessory) ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, accessories: current.accessories.includes(accessory) ? current.accessories.filter((item) => item !== accessory) : [...current.accessories, accessory] }))}>{accessoryLabels[accessory]}</button>)}</div></fieldset>
+                <fieldset className="avatar-fieldset">
+                  <legend>Visual</legend>
+                  <div className="avatar-choice-grid">
+                    <button type="button" className={draftAvatar.skin === "custom" ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, skin: "custom" }))}>Personalizado</button>
+                    {LIMEZU_SKINS.map((skin) => (
+                      <button type="button" key={skin} className={draftAvatar.skin === skin ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, skin }))}>{LIMEZU_LABELS[skin]}</button>
+                    ))}
+                  </div>
+                </fieldset>
+                {draftAvatar.skin === "custom" && <>
+                  <fieldset className="avatar-fieldset"><legend>Corpo</legend><div className="avatar-choice-grid">{AVATAR_BODY_TYPES.map((bodyType) => <button type="button" key={bodyType} className={draftAvatar.bodyType === bodyType ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bodyType }))}>{bodyTypeLabels[bodyType]}</button>)}</div></fieldset>
+                  <AvatarSwatches label="Tom de pele" values={AVATAR_SKIN_TONES} value={draftAvatar.skinTone} onChange={(skinTone) => setDraftAvatar((current) => ({ ...current, skinTone: skinTone as AvatarAppearance["skinTone"] }))} />
+                  <fieldset className="avatar-fieldset"><legend>Cabelo</legend><div className="avatar-choice-grid">{AVATAR_HAIR_STYLES.map((hairStyle) => <button type="button" key={hairStyle} className={draftAvatar.hairStyle === hairStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, hairStyle }))}>{hairLabels[hairStyle]}</button>)}</div></fieldset>
+                  <AvatarSwatches label="Cor do cabelo" values={AVATAR_HAIR_COLORS} value={draftAvatar.hairColor} onChange={(hairColor) => setDraftAvatar((current) => ({ ...current, hairColor: hairColor as AvatarAppearance["hairColor"] }))} />
+                  <fieldset className="avatar-fieldset"><legend>Estilo da blusa</legend><div className="avatar-choice-grid">{AVATAR_TOP_STYLES.map((topStyle) => <button type="button" key={topStyle} className={draftAvatar.topStyle === topStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, topStyle }))}>{topStyleLabels[topStyle]}</button>)}</div></fieldset>
+                  <AvatarSwatches label="Cor da blusa" values={AVATAR_TOP_COLORS} value={draftAvatar.topColor} onChange={(topColor) => setDraftAvatar((current) => ({ ...current, topColor: topColor as AvatarAppearance["topColor"] }))} />
+                  <fieldset className="avatar-fieldset"><legend>Estilo da calça</legend><div className="avatar-choice-grid">{AVATAR_BOTTOM_STYLES.map((bottomStyle) => <button type="button" key={bottomStyle} className={draftAvatar.bottomStyle === bottomStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bottomStyle }))}>{bottomStyleLabels[bottomStyle]}</button>)}</div></fieldset>
+                  <AvatarSwatches label="Cor da calça" values={AVATAR_BOTTOM_COLORS} value={draftAvatar.bottomColor} onChange={(bottomColor) => setDraftAvatar((current) => ({ ...current, bottomColor: bottomColor as AvatarAppearance["bottomColor"] }))} />
+                  <AvatarSwatches label="Sapatos" values={AVATAR_SHOE_COLORS} value={draftAvatar.shoeColor} onChange={(shoeColor) => setDraftAvatar((current) => ({ ...current, shoeColor: shoeColor as AvatarAppearance["shoeColor"] }))} />
+                  <fieldset className="avatar-fieldset"><legend>Acessórios</legend><div className="avatar-choice-grid">{AVATAR_ACCESSORIES.map((accessory) => <button type="button" key={accessory} className={draftAvatar.accessories.includes(accessory) ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, accessories: current.accessories.includes(accessory) ? current.accessories.filter((item) => item !== accessory) : [...current.accessories, accessory] }))}>{accessoryLabels[accessory]}</button>)}</div></fieldset>
+                </>}
               </div>
             </div>
             {avatarError && <p className="avatar-save-error">{avatarError}</p>}
@@ -451,6 +470,17 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
           <RoomAudioRenderer />
         </LiveKitRoom>
       </div>}
+
+      {ambient && !media && (
+        <ProximityVoice
+          token={ambient.token}
+          serverUrl={ambient.serverUrl}
+          selfPosition={position}
+          peers={peerPositions}
+          micOn={micOn}
+          onError={setAmbientError}
+        />
+      )}
     </main>
   );
 }

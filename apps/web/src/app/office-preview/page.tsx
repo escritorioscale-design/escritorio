@@ -12,16 +12,16 @@ export default function OfficePreviewPage() {
         <div>
           <span className="modern-preview-eyebrow">VERSÃO ALTERNATIVA · SEM CONFLITO</span>
           <h1>Modern Office</h1>
-          <p>Prévia construída com os tiles reais do pacote comprado.</p>
+          <p>Mapa fiel à referência enviada, com interação por cima da arte original.</p>
         </div>
         <Link href="/workspace" className="modern-preview-back"><ArrowLeft /> Voltar ao escritório</Link>
       </header>
       <section className="modern-preview-content">
         <div className="modern-preview-copy">
           <div className="modern-preview-badge"><CheckCircle2 /> Componente isolado</div>
-          <h2>Um escritório que funciona como espaço, não como uma imagem.</h2>
-          <p>As paredes, portas, mesas e cadeiras já estão organizadas em uma grade navegável. Clique dentro de uma sala ou use WASD para testar a circulação.</p>
-          <div className="modern-preview-legend"><span><i className="legend-dot dot-wood" /> Squads com 4 posições</span><span><i className="legend-dot dot-purple" /> Reunião geral</span><span><i className="legend-dot dot-gray" /> Criação e gerência</span></div>
+          <h2>A mesma planta da foto, agora navegável.</h2>
+          <p>A arte original define o visual. O personagem usa WASD ou clique, respeita mesas e paredes, abre portas ao se aproximar e senta nas cadeiras disponíveis.</p>
+          <div className="modern-preview-legend"><span><i className="legend-dot dot-wood" /> Mesas e circulação</span><span><i className="legend-dot dot-purple" /> Sala de criação</span><span><i className="legend-dot dot-gray" /> Sala do gerente</span></div>
         </div>
         <ModernOfficePreview />
       </section>

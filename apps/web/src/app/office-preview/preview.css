@@ -15,11 +15,11 @@
 .modern-preview-legend span { display: flex; align-items: center; gap: 8px; }
 .legend-dot { width: 11px; height: 11px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(40,40,35,.2); }
 .dot-wood { background: #bcaa8e; }.dot-purple { background: #9d95bb; }.dot-gray { background: #8f9699; }
-.modern-preview-board { position: relative; min-width: 0; min-height: min(65vw, 760px); overflow: hidden; border: 7px solid #4e5360; border-radius: 8px; background: #697078; box-shadow: 0 24px 60px rgba(54,48,38,.16); }
+.modern-preview-board { position: relative; width: min(100%, 760px); aspect-ratio: 1 / 1; justify-self: center; overflow: hidden; border: 7px solid #4e5360; border-radius: 8px; background: #697078; box-shadow: 0 24px 60px rgba(54,48,38,.16); }
 .modern-preview-canvas { position: absolute; inset: 0; }
 .modern-preview-canvas canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .modern-preview-hud { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.23); border-radius: 8px; background: rgba(29,31,37,.84); color: #f0eee5; pointer-events: none; }
 .modern-preview-hud span { color: #d8ff63; font-size: 8px; font-weight: 800; letter-spacing: .1em; }.modern-preview-hud strong { font-size: 9px; font-weight: 700; }
 @media(max-width:700px) {
-  .modern-preview-page { padding: 20px 12px 82px; }.modern-preview-header { display: block; margin-bottom: 18px; }.modern-preview-back { margin-top: 15px; }.modern-preview-content { display: block; }.modern-preview-copy { padding: 4px 3px 18px; }.modern-preview-copy h2 { max-width: 420px; font-size: 22px; }.modern-preview-legend { grid-template-columns: 1fr 1fr; margin-top: 18px; }.modern-preview-board { min-height: 72vw; height: 72vw; border-width: 4px; }.modern-preview-hud { left: 8px; right: 8px; bottom: 8px; }.modern-preview-hud strong { font-size: 8px; }
+  .modern-preview-page { padding: 20px 12px 82px; }.modern-preview-header { display: block; margin-bottom: 18px; }.modern-preview-back { margin-top: 15px; }.modern-preview-content { display: block; }.modern-preview-copy { padding: 4px 3px 18px; }.modern-preview-copy h2 { max-width: 420px; font-size: 22px; }.modern-preview-legend { grid-template-columns: 1fr 1fr; margin-top: 18px; }.modern-preview-board { width: 100%; border-width: 4px; }.modern-preview-hud { left: 8px; right: 8px; bottom: 8px; }.modern-preview-hud strong { font-size: 8px; }
 }

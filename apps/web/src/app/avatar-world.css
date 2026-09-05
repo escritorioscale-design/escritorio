@@ -30,7 +30,13 @@
 .movement-help span { padding: 3px 5px; border: 1px solid #d7d7d0; border-bottom-width: 2px; border-radius: 4px; background: white; color: #333; font-weight: 800; }
 .movement-help b { font-weight: 600; }
 .connection-pill { z-index: 8; }
+.mic-toggle { position: absolute; left: 14px; bottom: 50px; z-index: 8; display: flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: rgba(29,29,25,.88); color: #bdf1d8; font-size: 8px; font-weight: 700; cursor: pointer; }
+.mic-toggle svg { width: 12px; }
+.mic-toggle.off { color: #ffb2b5; }
+.proximity-room { position: fixed; width: 0; height: 0; overflow: visible; }
+.proximity-start-audio { position: fixed; z-index: 60; left: 50%; bottom: 24px; transform: translateX(-50%); }
 .person-row>span.person-avatar { display: grid; place-items: end center; overflow: hidden; background: #eeeee8; }
+
 
 .avatar-editor-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(20,20,18,.58); backdrop-filter: blur(8px); }
 .avatar-editor { width: min(850px,100%); max-height: min(760px,calc(100vh - 44px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,.7); border-radius: 22px; background: #fff; box-shadow: 0 32px 100px rgba(0,0,0,.28); }
@@ -81,16 +87,25 @@
 .map-meeting-hit { position: absolute; z-index: 5; border: 0; background: transparent; cursor: pointer; pointer-events: auto; }
 .map-meeting-hit:hover { background: rgba(101,226,205,.1); outline: 2px solid rgba(101,226,205,.6); outline-offset: -3px; }
 
-.office-game-container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.office-game-frame { position: relative; }
+.office-game-container { position: absolute; inset: 0; overflow: hidden; }
+.modern-preview-board { position: absolute; inset: 0; overflow: hidden; background: #697078; }
+.modern-preview-canvas { position: absolute; inset: 0; }
+.modern-preview-canvas canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.modern-preview-overlay { position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
+.modern-preview-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.office-game-frame { position: absolute; inset: 0; }
 .office-game-canvas { position: absolute; inset: 0; }
 .office-game-canvas canvas { display: block; image-rendering: pixelated; }
-.office-game-overlay { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.office-game-overlay { position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
+.office-game-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 
 .map-room-title { left: 12px; top: 10px; display: flex; align-items: center; gap: 6px; text-shadow: var(--office-title-shadow); }
 .map-room-title > div { display: grid; gap: 3px; }
 .map-room-title .office-room-icon { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 7px; background: var(--office-badge-bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); color: var(--office-badge-color); flex: 0 0 auto; }
 .map-room-title .office-room-icon svg { width: 11px; height: 11px; }
+.map-room-title-compact { gap: 0; }
+.map-room-title-compact .office-room-icon { width: 16px; height: 16px; opacity: .85; }
+.map-room-title-compact .office-room-icon svg { width: 9px; height: 9px; }
 .map-room-title strong { color: var(--office-title); font: 800 9px/1.1 Manrope; letter-spacing: .06em; text-transform: uppercase; }
 .map-room-title small { width: max-content; padding: 3px 5px; border: 1px solid rgba(0,0,0,.08); border-radius: 3px; background: var(--office-badge-bg); color: var(--office-badge-color); font-size: 7px; font-weight: 700; letter-spacing: .02em; }
 .office-customize { border-color: #ded8ff !important; background: #f7f5ff !important; color: #5e48bc; }

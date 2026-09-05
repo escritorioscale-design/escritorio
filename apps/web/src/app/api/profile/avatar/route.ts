@@ -11,11 +11,13 @@ import {
   AVATAR_HAIR_STYLES,
   AVATAR_SHOE_COLORS,
   AVATAR_SKIN_TONES,
+  AVATAR_SKINS,
   AVATAR_TOP_COLORS,
   AVATAR_TOP_STYLES,
 } from "@/lib/avatar";
 
 const avatarSchema = z.object({
+  skin: z.enum(AVATAR_SKINS),
   bodyType: z.enum(AVATAR_BODY_TYPES),
   skinTone: z.enum(AVATAR_SKIN_TONES),
   hairStyle: z.enum(AVATAR_HAIR_STYLES),
