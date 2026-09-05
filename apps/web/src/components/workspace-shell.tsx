@@ -6,14 +6,14 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, CalendarDays, Check, ChevronDown, Grid2X2, LogOut, MessageSquare,
-  Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, X,
+  Bell, CalendarDays, Check, ChevronDown, Grid2X2, Headphones, Lock, LogOut, MessageSquare,
+  Mic, Palette, Plus, Search, Settings, Sparkles, Users, Video, Volume2, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
 import { InviteModal } from "@/components/invite-modal";
-import { OfficeCanvas } from "@/components/office-canvas";
+import { OfficeScene } from "@/components/office-scene";
 import { signOut } from "@/lib/auth-client";
 import {
   clampPoint,
@@ -70,6 +70,13 @@ type Props = {
 };
 
 type OfficeTheme = "day" | "neon" | "studio";
+
+function roomIcon(room: RoomData) {
+  if (room.kind === "MEETING") return <Video />;
+  if (room.kind === "PROXIMITY") return <Lock />;
+  if (room.kind === "SOCIAL") return <Sparkles />;
+  return <Headphones />;
+}
 
 const movementKeys: Record<string, Point> = {
   arrowup: { x: 0, y: -1 }, w: { x: 0, y: -1 },
@@ -492,22 +499,24 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
             walkTo(((event.clientX - rect.left) / rect.width) * 100, ((event.clientY - rect.top) / rect.height) * 100);
           }}>
             <div className="map-dots" />
-            <div className="map-corridor" aria-hidden="true"><span>corredor principal · área de convivência</span></div>
             {decorationsVisible && <>
               <div className="map-decor decor-window decor-window-a" aria-hidden="true" />
               <div className="map-decor decor-window decor-window-b" aria-hidden="true" />
               <div className="map-decor decor-printer" aria-hidden="true" />
               <div className="map-decor decor-coffee" aria-hidden="true" />
             </>}
-            <OfficeCanvas rooms={rooms} theme={officeTheme} openDoorIds={openDoorIds} />
+            <OfficeScene rooms={rooms} theme={officeTheme} openDoorIds={openDoorIds} />
             {rooms.map((room) => (
               <div
                 key={`title-${room.id}`}
                 className="map-room-title"
                 style={{ left: `calc(${room.x}% + 12px)`, top: `calc(${room.y}% + 10px)`, pointerEvents: "none" }}
               >
-                <strong>{room.name}</strong>
-                <small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small>
+                <span className="office-room-icon">{roomIcon(room)}</span>
+                <div>
+                  <strong>{room.name}</strong>
+                  <small>{room.kind === "FOCUS" || room.name.toLowerCase().includes("cria") ? "4 posições de trabalho" : room.kind === "MEETING" ? "Até 24 participantes" : "Sala reservada"}</small>
+                </div>
               </div>
             ))}
             {rooms.filter((room) => room.kind === "MEETING").map((room) => (
