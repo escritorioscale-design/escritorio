@@ -68,6 +68,11 @@
 
 /* Pixel-office treatment: crisp furniture, hard shadows and a visible floor grid. */
 .map-stage { background-color: #c8c0ae; background-image: linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(rgba(91,77,58,.08) 1px, transparent 1px); background-size: 16px 16px; image-rendering: auto; }
+.pixel-office-canvas { position: absolute; z-index: 0; inset: 0; overflow: hidden; background: #202833; }
+.pixel-office-canvas canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.legacy-room-layer { display: none; }
+.map-meeting-hit { position: absolute; z-index: 5; border: 0; background: transparent; cursor: pointer; }
+.map-meeting-hit:hover { background: rgba(101,226,205,.08); outline: 2px solid rgba(101,226,205,.55); outline-offset: -3px; }
 .map-stage::before { content: ""; position: absolute; z-index: 1; inset: 7px; border: 2px solid rgba(83,72,56,.22); border-radius: 11px; pointer-events: none; }
 .map-dots { opacity: .18; background-size: 32px 32px; }
 .map-room { border: 3px solid rgba(83,72,56,.34); border-radius: 8px; box-shadow: 0 5px 0 rgba(83,72,56,.12), inset 0 0 0 4px rgba(255,255,255,.28); }

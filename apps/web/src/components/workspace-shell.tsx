@@ -12,6 +12,7 @@ import {
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
+import { OfficeCanvas } from "@/components/office-canvas";
 import { signOut } from "@/lib/auth-client";
 import {
   AVATAR_ACCESSORIES,
@@ -77,37 +78,55 @@ const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
 
 function getObstacles(rooms: RoomData[]): Obstacle[] {
   return rooms.flatMap((room) => {
+    const walls = roomWalls(room);
     if (room.kind === "MEETING") {
-      return [{ x: room.x + room.width * .18, y: room.y + room.height * .27, width: room.width * .64, height: room.height * .43 }];
+      return [...walls, { x: room.x + room.width * .18, y: room.y + room.height * .27, width: room.width * .64, height: room.height * .43 }];
     }
     if (room.kind === "PROXIMITY") {
-      return [{ x: room.x + room.width * .12, y: room.y + room.height * .29, width: room.width * .62, height: room.height * .52 }];
+      return [...walls, { x: room.x + room.width * .12, y: room.y + room.height * .29, width: room.width * .62, height: room.height * .52 }];
     }
     if (room.kind === "SOCIAL" && room.name.toLowerCase().includes("cria")) {
-      return Array.from({ length: 4 }, (_, index) => ({
+      return [...walls, ...Array.from({ length: 4 }, (_, index) => ({
         x: room.x + room.width * (.12 + (index % 2) * .48),
         y: room.y + room.height * (.34 + Math.floor(index / 2) * .34),
         width: room.width * .3,
         height: room.height * .14,
-      }));
+      }))];
     }
     if (room.kind === "SOCIAL") {
-      return [
+      return [...walls, ...[
         { x: room.x + room.width * .2, y: room.y + room.height * .36, width: room.width * .38, height: room.height * .15 },
         { x: room.x + room.width * .48, y: room.y + room.height * .62, width: room.width * .39, height: room.height * .15 },
         { x: room.x + room.width * .72, y: room.y + room.height * .29, width: room.width * .14, height: room.height * .18 },
-      ];
+      ]];
     }
     if (room.kind === "FOCUS") {
-      return Array.from({ length: 4 }, (_, index) => ({
+      return [...walls, ...Array.from({ length: 4 }, (_, index) => ({
         x: room.x + room.width * (.12 + (index % 2) * .48),
         y: room.y + room.height * (.31 + Math.floor(index / 2) * .38),
         width: room.width * .3,
         height: room.height * .16,
-      }));
+      }))];
     }
-    return [];
+    return walls;
   });
+}
+
+function roomWalls(room: RoomData): Obstacle[] {
+  const thickness = 1.2;
+  const doorWidth = 6;
+  const left = room.x;
+  const right = room.x + room.width;
+  const top = room.y;
+  const bottom = room.y + room.height;
+  const horizontalY = room.y < 40 ? bottom - thickness : top;
+  const firstWidth = (room.width - doorWidth) / 2;
+  return [
+    { x: left, y: top, width: thickness, height: room.height },
+    { x: right - thickness, y: top, width: thickness, height: room.height },
+    { x: left, y: horizontalY, width: firstWidth, height: thickness },
+    { x: left + firstWidth + doorWidth, y: horizontalY, width: firstWidth, height: thickness },
+  ];
 }
 
 function inside(point: Point, obstacle: Obstacle, padding = 1.25) {
@@ -455,6 +474,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
               <div className="map-decor decor-printer" aria-hidden="true" />
               <div className="map-decor decor-coffee" aria-hidden="true" />
             </>}
+            <OfficeCanvas rooms={rooms} theme={officeTheme} />
+            <div className="legacy-room-layer" aria-hidden="true">
             {rooms.map((room) => (
               <div
                 key={room.id}
@@ -467,6 +488,10 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms }: 
                 {room.kind === "MEETING" && <button className="room-art meeting-art" onClick={(event) => { event.stopPropagation(); joinCall(room); }}><span /><em><Video /> Entrar</em></button>}
                 {room.kind === "PROXIMITY" && (room.name.toLowerCase().includes("gerente") ? <div className="room-art manager-art"><i /><b /></div> : <div className="room-art garden-art"><i>✦</i><i>✿</i><i>✦</i></div>)}
               </div>
+            ))}
+            </div>
+            {rooms.filter((room) => room.kind === "MEETING").map((room) => (
+              <button key={`meeting-${room.id}`} className="map-meeting-hit" style={{ left: `${room.x}%`, top: `${room.y}%`, width: `${room.width}%`, height: `${room.height}%` }} onClick={() => joinCall(room)} aria-label="Entrar na sala de reunião" />
             ))}
 
             {Object.values(people).map((person) => (
