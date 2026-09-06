@@ -15,7 +15,7 @@ import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-chara
 import { InviteModal } from "@/components/invite-modal";
 import { OfficeBuilder, type LocalMoveState } from "@/components/office-builder";
 import { OfficeEditor } from "@/components/office-editor";
-import { canHear, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
+import { audioRoomAt, canHear, isRoomWide, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
 import { resolveOfficeLayout, SEAT_LOCK_RADIUS, type OfficeLayout, type Rect } from "@/lib/office-layout";
@@ -285,6 +285,11 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     () => Object.values(people).filter((person) => canHear(layout, position, person, selfSeatState, { sitting: person.sitting, seatLocked: person.seatLocked })),
     [people, position, layout, selfSeatState],
   );
+  // A room-wide room is one bubble, so the desk radii would be a lie there.
+  const roomWideZone = useMemo(() => {
+    const room = audioRoomAt(layout, position);
+    return isRoomWide(room) ? room : null;
+  }, [layout, position]);
   const nearbyForVideo = useMemo(
     () => nearby.map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
     [nearby],
@@ -462,14 +467,40 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                   <label>{person.name}</label>
                 </div>
               ))}
-              <div
-                className={`proximity-zone ${seatLocked ? "locked" : ""}`}
-                style={{
-                  left: `${position.x}%`, top: `${position.y}%`,
-                  width: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapCols) * 100}%`,
-                  height: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapRows) * 100}%`,
-                }}
-              />
+              {roomWideZone ? (
+                <div
+                  className="audio-room-zone"
+                  style={{
+                    left: `${(roomWideZone.x / layout.mapCols) * 100}%`,
+                    top: `${(roomWideZone.y / layout.mapRows) * 100}%`,
+                    width: `${(roomWideZone.w / layout.mapCols) * 100}%`,
+                    height: `${(roomWideZone.h / layout.mapRows) * 100}%`,
+                  }}
+                  aria-label={`Toda a sala ${roomWideZone.name} ouve esta conversa`}
+                />
+              ) : (
+                <>
+                  <div
+                    className={`proximity-zone ${seatLocked ? "locked" : ""}`}
+                    style={{
+                      left: `${position.x}%`, top: `${position.y}%`,
+                      width: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapCols) * 100}%`,
+                      height: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapRows) * 100}%`,
+                    }}
+                  />
+                  {sitting && (
+                    <div
+                      className={`seat-block-zone ${seatLocked ? "locked" : ""}`}
+                      style={{
+                        left: `${position.x}%`, top: `${position.y}%`,
+                        width: `${((SEAT_LOCK_RADIUS * 2) / layout.mapCols) * 100}%`,
+                        height: `${((SEAT_LOCK_RADIUS * 2) / layout.mapRows) * 100}%`,
+                      }}
+                      aria-label={seatLocked ? "Área que você bloqueia" : "Área que você bloquearia ao trancar a mesa"}
+                    />
+                  )}
+                </>
+              )}
               <div
                 className="map-character self-character"
                 style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
@@ -510,6 +541,21 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 </button>
               )}
             </div>
+            {ambient && !media && (
+              <ProximityVoice
+                token={ambient.token}
+                serverUrl={ambient.serverUrl}
+                layout={layout}
+                selfPosition={position}
+                selfSeat={selfSeatState}
+                peers={peerInfo}
+                nearby={nearbyForVideo}
+                self={{ name: user.name, photo }}
+                micOn={micOn}
+                cameraOn={cameraOn}
+                onError={setAmbientError}
+              />
+            )}
           </section>
 
           <aside className="people-panel">
@@ -630,20 +676,6 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
         </LiveKitRoom>
       </div>}
 
-      {ambient && !media && (
-        <ProximityVoice
-          token={ambient.token}
-          serverUrl={ambient.serverUrl}
-          layout={layout}
-          selfPosition={position}
-          selfSeat={selfSeatState}
-          peers={peerInfo}
-          nearby={nearbyForVideo}
-          micOn={micOn}
-          cameraOn={cameraOn}
-          onError={setAmbientError}
-        />
-      )}
     </main>
   );
 }

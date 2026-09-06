@@ -8,7 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:office": "node --test tests/office-simulation.test.mjs"
+    "test:office": "node --test \"tests/*.test.mjs\""
   },
   "dependencies": {
     "@livekit/components-react": "2.9.24",
