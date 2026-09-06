@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_OFFICE_LAYOUT as layout, SEAT_LOCK_RADIUS } from '../src/lib/office-layout.ts';
+import { DEFAULT_OFFICE_LAYOUT as layout, getAllSeats, tableForSeat } from '../src/lib/office-layout.ts';
 import { audioRoomAt, canHear, isRoomWide, volumeFor, PROXIMITY_SILENT_TILES } from '../src/lib/office-audio.ts';
 
 // Presence speaks in percentages; the rules think in tiles. Everything below
@@ -57,43 +57,42 @@ test('two different rooms never leak into each other', () => {
   assert.equal(volumeFor(layout, a, b, free, free), 0);
 });
 
-test('a locked desk overrides even a room-wide meeting room', () => {
-  const meeting = room('general');
-  const seated = centerOf(meeting);
-  const locked = { sitting: true, seatLocked: true };
-  const justInside = at(meeting.x + meeting.w / 2 + SEAT_LOCK_RADIUS - 0.3, meeting.y + meeting.h / 2);
-  const justOutside = at(meeting.x + meeting.w / 2 + SEAT_LOCK_RADIUS + 0.3, meeting.y + meeting.h / 2);
-  assert.equal(volumeFor(layout, seated, justInside, locked, free), 1, 'inside the bubble stays audible');
-  assert.equal(volumeFor(layout, seated, justOutside, locked, free), 0, 'past the bubble is cut, room-wide or not');
+test('a seated person speaks through the table area, not a character bubble', () => {
+  const seat = getAllSeats(layout).find(candidate => candidate.id === 'squad-1-chair-1');
+  const table = tableForSeat(layout, seat.id);
+  const seated = { sitting: true, seatId: seat.id };
+  assert.ok(table);
+  assert.equal(volumeFor(layout, at(seat.x, seat.y), at(table.x, table.y), seated, free), 1);
+  assert.equal(volumeFor(layout, at(seat.x, seat.y), at(table.x + table.radius + .2, table.y), seated, free), 0);
 });
 
-test('either side locking is enough to shrink the conversation', () => {
-  const squad = room('squad-1');
-  const a = at(squad.x + 3, squad.y + 3);
-  const b = at(squad.x + 4, squad.y + 3);
-  assert.equal(volumeFor(layout, a, b, free, free), 1);
-  assert.equal(volumeFor(layout, a, b, free, { sitting: true, seatLocked: true }), 1, 'still within the bubble');
-  const farInsideEarshot = at(squad.x + 3 + SEAT_LOCK_RADIUS + 1, squad.y + 3);
-  assert.equal(volumeFor(layout, a, farInsideEarshot, free, free), 1, 'unlocked, this is plain earshot');
-  assert.equal(volumeFor(layout, a, farInsideEarshot, { sitting: true, seatLocked: true }, free), 0, 'locked, it is cut');
+test('everyone seated at the same meeting table shares one conversation', () => {
+  const seats = getAllSeats(layout).filter(seat => seat.id.startsWith('squad-1-meeting-chair'));
+  assert.equal(seats.length, 4);
+  const first = { sitting: true, seatId: seats[0].id };
+  const last = { sitting: true, seatId: seats[3].id };
+  assert.equal(tableForSeat(layout, seats[0].id).id, tableForSeat(layout, seats[3].id).id);
+  assert.equal(volumeFor(layout, at(seats[0].x, seats[0].y), at(seats[3].x, seats[3].y), first, last), 1);
 });
 
-test('sitting without locking changes nothing about who hears you', () => {
-  const squad = room('squad-2');
-  const a = at(squad.x + 3, squad.y + 3);
-  const b = at(squad.x + 6, squad.y + 3);
-  const seatedUnlocked = { sitting: true, seatLocked: false };
-  assert.equal(volumeFor(layout, a, b, seatedUnlocked, free), volumeFor(layout, a, b, free, free));
+test('locking changes access, not the sound heard by people already inside', () => {
+  const seat = getAllSeats(layout).find(candidate => candidate.id === 'squad-2-chair-1');
+  const table = tableForSeat(layout, seat.id);
+  const peer = at(table.x, table.y);
+  const unlocked = { sitting: true, seatId: seat.id };
+  const locked = { ...unlocked, lockId: 'lock-session' };
+  assert.equal(volumeFor(layout, at(seat.x, seat.y), peer, unlocked, free), 1);
+  assert.equal(volumeFor(layout, at(seat.x, seat.y), peer, locked, free), 1);
 });
 
 test('the open corridor still falls off smoothly with distance', () => {
   // The corridor band between the top and bottom squad rows belongs to no room.
   const a = at(layout.mapCols / 2, 21.5);
   assert.equal(audioRoomAt(layout, a), undefined, 'sanity: this point is on the open floor');
-  const mid = at(layout.mapCols / 2 + 6, 21.5);
+  const mid = at(layout.mapCols / 2 + 3.5, 21.5);
   assert.equal(audioRoomAt(layout, mid), undefined);
   const volume = volumeFor(layout, a, mid, free, free);
-  assert.ok(volume > 0 && volume < 1, `expected partial volume at 6 tiles, got ${volume}`);
+  assert.ok(volume > 0 && volume < 1, `expected partial volume at 3.5 tiles, got ${volume}`);
   assert.equal(volumeFor(layout, a, at(layout.mapCols / 2 + PROXIMITY_SILENT_TILES + 1, 21.5), free, free), 0);
 });
 

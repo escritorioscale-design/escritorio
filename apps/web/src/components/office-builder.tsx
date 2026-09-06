@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_OFFICE_LAYOUT, TILE, doorRect, getWalls, type OfficeLayout, type Rect } from "@/lib/office-layout";
-import { OfficeSimulation, type MovementState, type WorldInput } from "@/lib/office-simulation";
+import { OfficeSimulation, type MovementState, type RestrictedZone, type WorldInput } from "@/lib/office-simulation";
 import { OfficeFurniture } from "@/components/office-furniture";
 import "./office-scene.css";
 
@@ -12,14 +12,18 @@ export type OfficeTheme = "day" | "neon" | "studio";
  * connection (the workspace's socket) feed it here instead of stacking a
  * second floating badge on top of the board. */
 export type SceneLive = { tone?: "online" | "connecting" | "offline"; label?: string };
+export type TableZoneView = { id: string; rect: Rect; locked: boolean; own?: boolean; label: string };
+export type MoveCommand = { id: string; x: number; y: number };
 const KEY_MAP: Record<string, string> = { w: "up", arrowup: "up", s: "down", arrowdown: "down", a: "left", arrowleft: "left", d: "right", arrowright: "right" };
 const EMPTY_SEATS = new Set<string>();
 
-export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds = EMPTY_SEATS, lockedZones = [], peers = [], onUpdate, theme = "day", active = true, children, showStatus = false, live }: {
+export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds = EMPTY_SEATS, lockedZones = [], tableZones = [], peers = [], moveCommand, onUpdate, theme = "day", active = true, children, showStatus = false, live }: {
   layout?: OfficeLayout;
   occupiedSeatIds?: ReadonlySet<string>;
-  lockedZones?: Rect[];
+  lockedZones?: RestrictedZone[];
+  tableZones?: TableZoneView[];
   peers?: { x: number; y: number }[];
+  moveCommand?: MoveCommand | null;
   onUpdate: (state: LocalMoveState) => void;
   theme?: OfficeTheme;
   active?: boolean;
@@ -40,7 +44,7 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
   const [target, setTarget] = useState<{ x: number; y: number } | null>(null);
   const worldW = layout.mapCols * TILE, worldH = layout.mapRows * TILE;
   const inputRef = useRef<WorldInput>({});
-  inputRef.current = { active, occupied: occupiedSeatIds, extraBlockers: lockedZones,
+  inputRef.current = { active, occupied: occupiedSeatIds, restrictedZones: lockedZones,
     peers: peers.map((p) => ({ x: p.x * layout.mapCols / 100, y: p.y * layout.mapRows / 100 })), keys: keys.current };
   const reportRef = useRef(onUpdate);
   reportRef.current = onUpdate;
@@ -83,6 +87,13 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
   }, [active]);
 
   useEffect(() => {
+    if (!moveCommand || !active) return;
+    simulation.walkTo({ x: moveCommand.x * layout.mapCols / 100, y: moveCommand.y * layout.mapRows / 100 }, inputRef.current);
+    setTarget(simulation.path.length ? simulation.path[simulation.path.length - 1] : null);
+    setFollow(true);
+  }, [moveCommand, active, simulation, layout]);
+
+  useEffect(() => {
     let raf = 0, last = performance.now(), lastReport = "", lastHint = "", lastDoors = -1;
     function step(now: number) {
       simulation.tick((now - last) / 1000, inputRef.current); last = now;
@@ -120,7 +131,7 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
     return () => cancelAnimationFrame(raf);
   }, [simulation, worldW, worldH]);
 
-  function walk(event: React.PointerEvent) {
+  function walk(event: React.MouseEvent) {
     if (!worldRef.current || !active) return;
     const box = worldRef.current.getBoundingClientRect();
     const point = { x: (event.clientX - box.left) / box.width * layout.mapCols, y: (event.clientY - box.top) / box.height * layout.mapRows };
@@ -131,7 +142,7 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
 
   const changeZoom = (amount: number) => { setZoomFactor((z) => Math.max(1, Math.min(4, z + amount))); setFollow(true); };
   return (
-    <div ref={containerRef} className={`office-game-container office-interactive scene-${theme}`} tabIndex={0} aria-label="Escritório interativo. Use WASD, setas ou clique para andar; E para sentar ou levantar.">
+    <div ref={containerRef} className={`office-game-container office-interactive scene-${theme}`} tabIndex={0} aria-label="Escritório interativo. Use WASD, setas ou clique duas vezes para andar; E para sentar ou levantar.">
       <div className="office-scene-toolbar">
         <span className={`office-scene-live ${live?.tone ?? "online"}`}><i /> {live?.label ?? "Escritório"}</span>
         <div>
@@ -141,7 +152,7 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
           <button type="button" onClick={() => { setZoomFactor(2.5); setFollow(true); }} aria-label="Seguir personagem">Meu personagem</button>
         </div>
       </div>
-      <div ref={worldRef} className="css-office-world office-real-world" style={{ width: worldW, height: worldH }} onPointerUp={walk}>
+      <div ref={worldRef} className="css-office-world office-real-world" style={{ width: worldW, height: worldH }} onDoubleClick={walk}>
         {layout.rooms.map((room) => <div key={`floor-${room.id}`} className={`office-real-floor floor-${room.kind.toLowerCase()} ${room.parentId ? "is-inner" : ""}`}
           style={{ left: room.x * TILE, top: room.y * TILE, width: room.w * TILE, height: room.h * TILE }} />)}
         {layout.furniture.map((piece) => <OfficeFurniture key={piece.id} piece={piece} rows={layout.mapRows} />)}
@@ -156,12 +167,15 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
           </div>;
         })}
         {target && <div className="office-walk-target" style={{ left: target.x * TILE, top: target.y * TILE }} />}
-        {lockedZones.map((zone, i) => <div key={i} className="css-office-lock-zone" style={{ left: (zone.x + zone.w / 2) * TILE, top: (zone.y + zone.h / 2) * TILE, width: zone.w * TILE, height: zone.h * TILE }} />)}
+        {tableZones.map((zone) => <div key={zone.id} className={`table-speech-zone ${zone.locked ? "locked" : ""} ${zone.own ? "own" : ""}`}
+          style={{ left: (zone.rect.x + zone.rect.w / 2) * TILE, top: (zone.rect.y + zone.rect.h / 2) * TILE, width: zone.rect.w * TILE, height: zone.rect.h * TILE }}>
+          <span>{zone.locked ? "Mesa trancada" : "Área de fala"} · {zone.label}</span>
+        </div>)}
         <div className="css-office-actors">{children}</div>
       </div>
       {showStatus && <div className="office-scene-status">
         <span>{status}</span>
-        <span className="office-scene-keys"><kbd>WASD</kbd><kbd>↑ ↓ ← →</kbd> ou clique para andar</span>
+        <span className="office-scene-keys"><kbd>WASD</kbd><kbd>↑ ↓ ← →</kbd> ou clique 2x para andar</span>
         <small>{openCount} {openCount === 1 ? "porta aberta" : "portas abertas"}</small>
       </div>}
       <div className="office-touch-controls" aria-label="Controles de movimento">

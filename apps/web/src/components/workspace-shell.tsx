@@ -13,12 +13,16 @@ import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
 import { InviteModal } from "@/components/invite-modal";
-import { OfficeBuilder, type LocalMoveState } from "@/components/office-builder";
+import { OfficeBuilder, type LocalMoveState, type MoveCommand, type TableZoneView } from "@/components/office-builder";
 import { OfficeEditor } from "@/components/office-editor";
 import { audioRoomAt, canHear, isRoomWide, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
-import { resolveOfficeLayout, SEAT_LOCK_RADIUS, type OfficeLayout, type Rect } from "@/lib/office-layout";
+import {
+  getConversationTables, isInsideTable, resolveOfficeLayout, tableForSeat, tableRect,
+  TABLE_REVEAL_DISTANCE, type OfficeLayout,
+} from "@/lib/office-layout";
+import type { RestrictedZone } from "@/lib/office-simulation";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -47,10 +51,12 @@ type Presence = {
   moving?: boolean;
   sitting?: boolean;
   seatId?: string | null;
-  seatLocked?: boolean;
+  lockId?: string | null;
 };
 type MediaGrant = { token: string; serverUrl: string };
 type Point = { x: number; y: number };
+type AccessRequest = { requesterId: string; requesterName: string; lockId: string };
+type ComeRequest = { requesterId: string; requesterName: string; x: number; y: number };
 
 type Props = {
   user: { id: string; name: string; email: string; avatar: AvatarAppearance; photo: string | null };
@@ -116,6 +122,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const [direction, setDirection] = useState<AvatarDirection>("down");
   const [moving, setMoving] = useState(false);
   const [sitting, setSitting] = useState(false);
+  const [seatId, setSeatId] = useState<string | null>(null);
   const [people, setPeople] = useState<Record<string, Presence>>({});
   const [connection, setConnection] = useState<"connecting" | "online" | "offline">("connecting");
   const [media, setMedia] = useState<MediaGrant | null>(null);
@@ -124,7 +131,14 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const [ambientError, setAmbientError] = useState("");
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
-  const [seatLocked, setSeatLocked] = useState(false);
+  const [lockId, setLockId] = useState<string | null>(null);
+  const [accessGrants, setAccessGrants] = useState<Record<string, string>>({});
+  const [requestedLocks, setRequestedLocks] = useState<Record<string, string>>({});
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [comeRequests, setComeRequests] = useState<ComeRequest[]>([]);
+  const [moveCommand, setMoveCommand] = useState<MoveCommand | null>(null);
+  const [personMenu, setPersonMenu] = useState<{ person: Presence; x: number; y: number } | null>(null);
+  const [actionFeedback, setActionFeedback] = useState("");
   const [avatar, setAvatar] = useState(user.avatar);
   const [draftAvatar, setDraftAvatar] = useState(user.avatar);
   const [photo, setPhoto] = useState(user.photo);
@@ -142,13 +156,25 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const movingRef = useRef(false);
   const sittingRef = useRef(false);
   const seatIdRef = useRef<string | null>(null);
-  const seatLockedRef = useRef(false);
+  const lockIdRef = useRef<string | null>(null);
   const lastEmitRef = useRef(0);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const occupiedSeatIds = useMemo(
     () => new Set(Object.values(people).map((person) => person.seatId).filter((id): id is string => Boolean(id))),
     [people],
   );
+  const conversationTables = useMemo(() => getConversationTables(layout), [layout]);
+
+  const showFeedback = useCallback((message: string) => {
+    setActionFeedback(message);
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => setActionFeedback(""), 3500);
+  }, []);
+
+  useEffect(() => () => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+  }, []);
 
   useEffect(() => {
     try {
@@ -163,21 +189,29 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
 
   const emitMovement = useCallback((
     next: Point, nextDirection: AvatarDirection, nextMoving: boolean, force = false,
-    nextSitting = sittingRef.current, nextSeatId = seatIdRef.current, nextSeatLocked = seatLockedRef.current,
+    nextSitting = sittingRef.current, nextSeatId = seatIdRef.current, nextLockId = lockIdRef.current,
   ) => {
     const now = performance.now();
     if (!force && now - lastEmitRef.current < 75) return;
     lastEmitRef.current = now;
     socketRef.current?.emit("position:update", {
       ...next, direction: nextDirection, moving: nextMoving,
-      sitting: nextSitting, seatId: nextSeatId, seatLocked: nextSitting && nextSeatLocked,
+      sitting: nextSitting, seatId: nextSeatId, lockId: nextSitting ? nextLockId : null,
     });
   }, []);
 
   function toggleSeatLock() {
-    const next = !seatLockedRef.current;
-    seatLockedRef.current = next;
-    setSeatLocked(next);
+    const table = tableForSeat(layout, seatIdRef.current);
+    if (!sittingRef.current || !table) return;
+    const otherLock = Object.values(people).find((person) => person.sitting && person.lockId && tableForSeat(layout, person.seatId)?.id === table.id);
+    if (!lockIdRef.current && otherLock) {
+      showFeedback(`${otherLock.name} já trancou esta mesa.`);
+      return;
+    }
+    const next = lockIdRef.current ? null : crypto.randomUUID();
+    lockIdRef.current = next;
+    setLockId(next);
+    if (!next) setAccessRequests([]);
     emitMovement(positionRef.current, directionRef.current, movingRef.current, true, sittingRef.current, seatIdRef.current, next);
   }
 
@@ -204,9 +238,10 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
             ...positionRef.current,
             status: "available",
             direction: directionRef.current,
-            moving: false,
-            sitting: false,
-            seatId: null,
+            moving: movingRef.current,
+            sitting: sittingRef.current,
+            seatId: seatIdRef.current,
+            lockId: sittingRef.current ? lockIdRef.current : null,
           });
         });
         socket.on("disconnect", () => setConnection("offline"));
@@ -219,13 +254,27 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
         socket.on("presence:left", ({ userId }: { userId: string }) => {
           setPeople((current) => { const next = { ...current }; delete next[userId]; return next; });
         });
+        socket.on("table:access-requested", (request: AccessRequest) => {
+          if (lockIdRef.current === request.lockId) setAccessRequests((current) => current.some((item) => item.requesterId === request.requesterId && item.lockId === request.lockId) ? current : [...current, request]);
+        });
+        socket.on("table:access-resolved", ({ ownerId, ownerName, lockId: grantedLock, approved }: { ownerId: string; ownerName: string; lockId: string; approved: boolean }) => {
+          setRequestedLocks((current) => { const next = { ...current }; delete next[ownerId]; return next; });
+          if (approved) {
+            setAccessGrants((current) => ({ ...current, [ownerId]: grantedLock }));
+            showFeedback(`${ownerName} liberou sua entrada.`);
+          } else showFeedback(`${ownerName} não liberou a entrada.`);
+        });
+        socket.on("presence:come-requested", (request: ComeRequest) => setComeRequests((current) => current.some((item) => item.requesterId === request.requesterId) ? current : [...current, request]));
+        socket.on("presence:come-resolved", ({ targetName, approved }: { targetName: string; approved: boolean }) => {
+          showFeedback(approved ? `${targetName} aceitou e está a caminho.` : `${targetName} recusou o convite.`);
+        });
       } catch {
         setConnection("offline");
       }
     }
     connect();
     return () => { cancelled = true; socket?.disconnect(); };
-  }, [user.id, workspace.id]);
+  }, [showFeedback, user.id, workspace.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,25 +313,27 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
       sittingRef.current = state.sitting;
       setSitting(state.sitting);
       // Standing up drops the lock — it only makes sense while at the desk.
-      if (!state.sitting && seatLockedRef.current) {
-        seatLockedRef.current = false;
-        setSeatLocked(false);
+      if (!state.sitting && lockIdRef.current) {
+        lockIdRef.current = null;
+        setLockId(null);
+        setAccessRequests([]);
       }
     }
     seatIdRef.current = state.seatId;
+    setSeatId(state.seatId);
     emitMovement(next, state.direction, state.moving, changedActivity, state.sitting, state.seatId);
   }, [emitMovement]);
 
-  const selfSeatState = useMemo(() => ({ sitting, seatLocked }), [sitting, seatLocked]);
+  const selfSeatState = useMemo(() => ({ sitting, seatId, lockId }), [sitting, seatId, lockId]);
   const peerInfo = useMemo(
     () => Object.fromEntries(Object.values(people).map((person) => [
       person.userId,
-      { x: person.x, y: person.y, sitting: person.sitting, seatLocked: person.seatLocked },
+      { x: person.x, y: person.y, sitting: person.sitting, seatId: person.seatId, lockId: person.lockId },
     ])),
     [people],
   );
   const nearby = useMemo(
-    () => Object.values(people).filter((person) => canHear(layout, position, person, selfSeatState, { sitting: person.sitting, seatLocked: person.seatLocked })),
+    () => Object.values(people).filter((person) => canHear(layout, position, person, selfSeatState, { sitting: person.sitting, seatId: person.seatId, lockId: person.lockId })),
     [people, position, layout, selfSeatState],
   );
   // A room-wide room is one bubble, so the desk radii would be a lie there.
@@ -291,19 +342,81 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     return isRoomWide(room) ? room : null;
   }, [layout, position]);
   const nearbyForVideo = useMemo(
-    () => nearby.map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
-    [nearby],
+    () => nearby.filter((person) => Math.hypot(
+      (person.x - position.x) * layout.mapCols / 100,
+      (person.y - position.y) * layout.mapRows / 100,
+    ) <= PROXIMITY_SILENT_TILES).map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
+    [nearby, position, layout],
   );
   // Other people's self-locked desks are temporary solid obstacles — nobody
   // else can walk into that little bubble while it's up.
-  const lockedZones = useMemo<Rect[]>(
-    () => Object.values(people).filter((person) => person.sitting && person.seatLocked).map((person) => {
-      const tx = (person.x / 100) * layout.mapCols, ty = (person.y / 100) * layout.mapRows;
-      return { x: tx - SEAT_LOCK_RADIUS, y: ty - SEAT_LOCK_RADIUS, w: SEAT_LOCK_RADIUS * 2, h: SEAT_LOCK_RADIUS * 2 };
-    }),
-    [people, layout],
+  const selfTile = useMemo(() => ({ x: position.x * layout.mapCols / 100, y: position.y * layout.mapRows / 100 }), [position, layout]);
+  const tableBySeat = useMemo(() => new Map(conversationTables.flatMap((table) => table.seatIds.map((id) => [id, table] as const))), [conversationTables]);
+  const selfTable = seatId ? tableBySeat.get(seatId) : undefined;
+  const tableZones = useMemo<TableZoneView[]>(() => conversationTables.flatMap((table) => {
+    const occupants = Object.values(people).filter((person) => person.sitting && person.seatId && table.seatIds.includes(person.seatId));
+    const isOwn = Boolean(sitting && seatId && table.seatIds.includes(seatId));
+    if (!occupants.length && !isOwn) return [];
+    if (!isOwn && !isInsideTable(table, selfTile, TABLE_REVEAL_DISTANCE)) return [];
+    const locked = Boolean((isOwn && lockId) || occupants.some((person) => person.lockId));
+    const names = [...(isOwn ? ["você"] : []), ...occupants.map((person) => person.name)].join(", ");
+    return [{ id: table.id, rect: tableRect(table), locked, own: isOwn, label: names }];
+  }), [conversationTables, people, sitting, seatId, selfTile, lockId]);
+  const lockedTableOwners = useMemo(() => {
+    const seen = new Set<string>();
+    return Object.values(people).flatMap((person) => {
+      if (!person.sitting || !person.seatId || !person.lockId) return [];
+      const table = tableBySeat.get(person.seatId);
+      if (!table || seen.has(table.id)) return [];
+      seen.add(table.id);
+      return [{ person, table }];
+    });
+  }, [people, tableBySeat]);
+  const lockedZones = useMemo<RestrictedZone[]>(
+    () => lockedTableOwners.flatMap(({ person, table }) => accessGrants[person.userId] === person.lockId
+      ? [] : [{ id: person.lockId!, rect: tableRect(table) }]),
+    [lockedTableOwners, accessGrants],
   );
+  const nearbyLockedTable = useMemo(() => lockedTableOwners
+    .filter(({ person, table }) => accessGrants[person.userId] !== person.lockId
+      && !isInsideTable(table, selfTile)
+      && isInsideTable(table, selfTile, TABLE_REVEAL_DISTANCE))
+    .sort((a, b) => Math.hypot(a.table.x - selfTile.x, a.table.y - selfTile.y) - Math.hypot(b.table.x - selfTile.x, b.table.y - selfTile.y))[0],
+  [lockedTableOwners, accessGrants, selfTile]);
   const meetingRoom = rooms.find((room) => room.kind === "MEETING") ?? rooms[0];
+
+  useEffect(() => {
+    if (!personMenu) return;
+    const close = () => setPersonMenu(null);
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", escape); };
+  }, [personMenu]);
+
+  function requestTableAccess() {
+    if (!nearbyLockedTable?.person.lockId) return;
+    socketRef.current?.emit("table:access-request", { ownerId: nearbyLockedTable.person.userId, lockId: nearbyLockedTable.person.lockId });
+    setRequestedLocks((current) => ({ ...current, [nearbyLockedTable.person.userId]: nearbyLockedTable.person.lockId! }));
+    showFeedback(`Solicitação enviada para ${nearbyLockedTable.person.name}.`);
+  }
+
+  function resolveAccessRequest(request: AccessRequest, approved: boolean) {
+    socketRef.current?.emit("table:access-response", { requesterId: request.requesterId, lockId: request.lockId, approved });
+    setAccessRequests((current) => current.filter((item) => item !== request));
+  }
+
+  function askPersonToCome(person: Presence) {
+    socketRef.current?.emit("presence:come-request", { targetId: person.userId });
+    setPersonMenu(null);
+    showFeedback(`Convite enviado para ${person.name}.`);
+  }
+
+  function resolveComeRequest(request: ComeRequest, approved: boolean) {
+    socketRef.current?.emit("presence:come-response", { requesterId: request.requesterId, approved });
+    if (approved) setMoveCommand({ id: `${request.requesterId}:${Date.now()}`, x: request.x, y: request.y });
+    setComeRequests((current) => current.filter((item) => item !== request));
+  }
 
   function openAvatarEditor() {
     setDraftAvatar(avatar);
@@ -451,6 +564,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
               theme={officeTheme}
               occupiedSeatIds={occupiedSeatIds}
               lockedZones={lockedZones}
+              tableZones={tableZones}
+              moveCommand={moveCommand}
               onUpdate={handleLocalUpdate}
               active={!editorOpen && !officeEditorOpen && !layoutEditorOpen}
               showStatus
@@ -462,12 +577,17 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                   key={person.userId}
                   style={{ left: `${person.x}%`, top: `${person.y}%`, zIndex: Math.round(20 + person.y) }}
                   aria-label={person.name}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setPersonMenu({ person, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 80) });
+                  }}
                 >
                   <AvatarCharacter appearance={normalizeAvatar(person.avatar)} direction={person.direction} moving={person.moving} sitting={person.sitting} />
                   <label>{person.name}</label>
                 </div>
               ))}
-              {roomWideZone ? (
+              {!sitting && roomWideZone ? (
                 <div
                   className="audio-room-zone"
                   style={{
@@ -478,29 +598,16 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                   }}
                   aria-label={`Toda a sala ${roomWideZone.name} ouve esta conversa`}
                 />
-              ) : (
-                <>
+              ) : !sitting ? (
                   <div
-                    className={`proximity-zone ${seatLocked ? "locked" : ""}`}
+                    className="proximity-zone"
                     style={{
                       left: `${position.x}%`, top: `${position.y}%`,
-                      width: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapCols) * 100}%`,
-                      height: `${(((seatLocked ? SEAT_LOCK_RADIUS : PROXIMITY_SILENT_TILES) * 2) / layout.mapRows) * 100}%`,
+                      width: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapCols) * 100}%`,
+                      height: `${((PROXIMITY_SILENT_TILES * 2) / layout.mapRows) * 100}%`,
                     }}
                   />
-                  {sitting && (
-                    <div
-                      className={`seat-block-zone ${seatLocked ? "locked" : ""}`}
-                      style={{
-                        left: `${position.x}%`, top: `${position.y}%`,
-                        width: `${((SEAT_LOCK_RADIUS * 2) / layout.mapCols) * 100}%`,
-                        height: `${((SEAT_LOCK_RADIUS * 2) / layout.mapRows) * 100}%`,
-                      }}
-                      aria-label={seatLocked ? "Área que você bloqueia" : "Área que você bloquearia ao trancar a mesa"}
-                    />
-                  )}
-                </>
-              )}
+              ) : null}
               <div
                 className="map-character self-character"
                 style={{ left: `${position.x}%`, top: `${position.y}%`, zIndex: Math.round(20 + position.y) }}
@@ -529,15 +636,26 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
               >
                 <Camera /> {cameraOn ? "Câmera ligada" : "Câmera desligada"}
               </button>
-              {sitting && (
+              {sitting && selfTable && (
                 <button
                   type="button"
-                  className={`mic-toggle seat-lock-toggle ${seatLocked ? "on" : "off"}`}
+                  className={`mic-toggle seat-lock-toggle ${lockId ? "on" : "off"}`}
                   onClick={toggleSeatLock}
-                  aria-pressed={seatLocked}
-                  aria-label={seatLocked ? "Destrancar minha mesa" : "Trancar minha mesa"}
+                  aria-pressed={Boolean(lockId)}
+                  aria-label={lockId ? "Destrancar minha mesa" : "Trancar minha mesa"}
                 >
-                  {seatLocked ? <Lock /> : <LockOpen />} {seatLocked ? "Mesa trancada" : "Trancar minha mesa"}
+                  {lockId ? <Lock /> : <LockOpen />} {lockId ? "Mesa trancada" : "Trancar minha mesa"}
+                </button>
+              )}
+              {nearbyLockedTable && (
+                <button
+                  type="button"
+                  className="mic-toggle table-access-button"
+                  onClick={requestTableAccess}
+                  disabled={requestedLocks[nearbyLockedTable.person.userId] === nearbyLockedTable.person.lockId}
+                >
+                  <LockOpen /> {requestedLocks[nearbyLockedTable.person.userId] === nearbyLockedTable.person.lockId
+                    ? "Entrada solicitada" : `Solicitar entrada · ${nearbyLockedTable.person.name}`}
                 </button>
               )}
             </div>
@@ -668,6 +786,37 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
       )}
 
       {inviteOpen && <InviteModal organizationId={organization.id} onClose={() => setInviteOpen(false)} />}
+
+      {(accessRequests.length > 0 || comeRequests.length > 0) && (
+        <div className="office-request-stack" aria-live="polite">
+          {accessRequests.map((request) => (
+            <section className="office-request-card" key={`access:${request.requesterId}:${request.lockId}`}>
+              <Lock />
+              <div><strong>{request.requesterName} quer entrar</strong><span>Permitir acesso à área da sua mesa?</span></div>
+              <button type="button" className="reject" onClick={() => resolveAccessRequest(request, false)}>Recusar</button>
+              <button type="button" className="approve" onClick={() => resolveAccessRequest(request, true)}>Permitir</button>
+            </section>
+          ))}
+          {comeRequests.map((request) => (
+            <section className="office-request-card" key={`come:${request.requesterId}`}>
+              <Users />
+              <div><strong>{request.requesterName} chamou você</strong><span>Ir até essa pessoa agora?</span></div>
+              <button type="button" className="reject" onClick={() => resolveComeRequest(request, false)}>Agora não</button>
+              <button type="button" className="approve" onClick={() => resolveComeRequest(request, true)}>Ir até lá</button>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {personMenu && (
+        <div className="person-context-menu" role="menu" style={{ left: personMenu.x, top: personMenu.y }} onClick={(event) => event.stopPropagation()}>
+          <button type="button" role="menuitem" onClick={() => askPersonToCome(personMenu.person)}>
+            <Users /> Pedir para {personMenu.person.name} vir até mim
+          </button>
+        </div>
+      )}
+
+      {actionFeedback && <div className="office-action-feedback" role="status">{actionFeedback}</div>}
 
       {media && <div className="call-overlay" data-lk-theme="default">
         <LiveKitRoom token={media.token} serverUrl={media.serverUrl} connect audio video={false} onDisconnected={() => setMedia(null)}>

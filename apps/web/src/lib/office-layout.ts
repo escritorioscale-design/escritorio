@@ -14,10 +14,10 @@ import { navigate } from "./office-navigation.ts";
 export const TILE = 32;
 export const WALL_THICKNESS = 0.4;
 export const DOOR_WIDTH = 2.5;
-/** Radius (tiles) of a self-locked seat's private bubble — used both to keep
- * other people's characters from walking in and to cap how far the
- * conversation carries once someone locks their own desk. */
-export const SEAT_LOCK_RADIUS = 1.8;
+/** Extra room around a table's physical footprint for conversation/movement. */
+export const TABLE_SPEECH_PADDING = 1.2;
+/** Occupied table areas appear as someone approaches this many extra tiles. */
+export const TABLE_REVEAL_DISTANCE = 2.5;
 
 export type DoorSide = "top" | "bottom";
 export type AvatarDirection = "up" | "down" | "left" | "right";
@@ -49,6 +49,14 @@ export type LayoutFurniture = {
 };
 
 export type Seat = { id: string; roomId: string; x: number; y: number; direction: AvatarDirection };
+export type ConversationTable = {
+  id: string;
+  roomId: string;
+  x: number;
+  y: number;
+  radius: number;
+  seatIds: string[];
+};
 
 export type OfficeLayout = {
   version: number;
@@ -235,6 +243,46 @@ export function getAllSeats(layout: OfficeLayout): Seat[] {
       y: piece.y,
       direction: piece.facing ?? "up",
     }));
+}
+
+/** Desks and meeting tables each own one rounded conversation area. Chairs
+ * are assigned to the closest table in the same (smallest) room, so custom
+ * layouts created in the editor follow the same rule as the default layout. */
+export function getConversationTables(layout: OfficeLayout): ConversationTable[] {
+  const seats = getAllSeats(layout);
+  const tables = layout.furniture
+    .filter((piece) => piece.key.startsWith("desk") || piece.key === "table-long")
+    .map((piece) => {
+      const footprint = defaultFootprint(piece.key) ?? { w: 3.2, h: 1.6 };
+      const scale = piece.scale ?? 1;
+      return {
+        id: piece.id,
+        roomId: roomAt(layout, piece.x, piece.y)?.id ?? "",
+        x: piece.x,
+        y: piece.y,
+        radius: Math.max(footprint.w * scale, footprint.h * scale) / 2 + TABLE_SPEECH_PADDING,
+        seatIds: [] as string[],
+      };
+    });
+  for (const seat of seats) {
+    const table = tables
+      .filter((candidate) => candidate.roomId === seat.roomId)
+      .sort((a, b) => Math.hypot(a.x - seat.x, a.y - seat.y) - Math.hypot(b.x - seat.x, b.y - seat.y))[0];
+    if (table) table.seatIds.push(seat.id);
+  }
+  return tables.filter((table) => table.seatIds.length > 0);
+}
+
+export function tableForSeat(layout: OfficeLayout, seatId?: string | null): ConversationTable | undefined {
+  return seatId ? getConversationTables(layout).find((table) => table.seatIds.includes(seatId)) : undefined;
+}
+
+export function isInsideTable(table: ConversationTable, point: { x: number; y: number }, margin = 0): boolean {
+  return Math.abs(table.x - point.x) < table.radius + margin && Math.abs(table.y - point.y) < table.radius + margin;
+}
+
+export function tableRect(table: ConversationTable): Rect {
+  return { x: table.x - table.radius, y: table.y - table.radius, w: table.radius * 2, h: table.radius * 2 };
 }
 
 /** Doors currently visually open — proximity-based, and never true for a

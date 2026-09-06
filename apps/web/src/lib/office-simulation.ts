@@ -1,8 +1,9 @@
 import { doorRect, getAllSeats, getFurnitureColliders, getWalls, openDoorsForPosition, type AvatarDirection, type OfficeLayout, type Rect, type Seat } from "./office-layout.ts";
-import { clearSegment, moveSafely, navigate, nearestWalkable, type Point } from "./office-navigation.ts";
+import { canStand, clearSegment, moveSafely, navigate, nearestWalkable, type Point } from "./office-navigation.ts";
 
 export type MovementState = { xPercent: number; yPercent: number; direction: AvatarDirection; moving: boolean; sitting: boolean; seatId: string | null };
-export type WorldInput = { keys?: ReadonlySet<string>; occupied?: ReadonlySet<string>; extraBlockers?: Rect[]; peers?: Point[]; active?: boolean };
+export type RestrictedZone = { id: string; rect: Rect };
+export type WorldInput = { keys?: ReadonlySet<string>; occupied?: ReadonlySet<string>; extraBlockers?: Rect[]; restrictedZones?: RestrictedZone[]; peers?: Point[]; active?: boolean };
 export type DoorState = { progress: number; hold: number; open: boolean };
 const SPEED = 4.6;
 
@@ -15,10 +16,12 @@ export class OfficeSimulation {
   seatId: string | null = null;
   path: Point[] = [];
   targetSeat: string | null = null;
-  hint = "Clique no chão para andar ou em uma cadeira para sentar.";
+  hint = "Clique duas vezes no chão para andar ou em uma cadeira para sentar.";
   doors = new Map<string, DoorState>();
   private staticBlockers: Rect[];
   private seats: Seat[];
+  private knownRestrictedZones = new Set<string>();
+  private leavingRestrictedZones = new Set<string>();
   private standCooldown = 0;
   private stationary = 0;
   layout: OfficeLayout;
@@ -33,18 +36,37 @@ export class OfficeSimulation {
   blockers(extra: Rect[] = [], pathing = false) {
     return [...this.staticBlockers, ...this.layout.rooms.filter((room) => room.locked || (!pathing && !this.doors.get(room.id)?.open)).map(doorRect), ...extra];
   }
+  private inputBlockers(input: WorldInput) {
+    const zones = input.restrictedZones ?? [];
+    const currentIds = new Set(zones.map((zone) => zone.id));
+    for (const id of this.knownRestrictedZones) if (!currentIds.has(id)) {
+      this.knownRestrictedZones.delete(id);
+      this.leavingRestrictedZones.delete(id);
+    }
+    const restricted = zones.flatMap(({ id, rect }) => {
+      if (!this.knownRestrictedZones.has(id)) {
+        this.knownRestrictedZones.add(id);
+        if (!canStand(this.position, [rect], this.layout.mapCols, this.layout.mapRows)) this.leavingRestrictedZones.add(id);
+      }
+      if (!this.leavingRestrictedZones.has(id)) return [rect];
+      if (!canStand(this.position, [rect], this.layout.mapCols, this.layout.mapRows)) return [];
+      this.leavingRestrictedZones.delete(id);
+      return [rect];
+    });
+    return [...(input.extraBlockers ?? []), ...restricted];
+  }
   private clear(from: Point, to: Point, blockers: Rect[]) { return clearSegment(from, to, blockers, this.layout.mapCols, this.layout.mapRows); }
   private leaveSeat() {
     this.sitting = false; this.seatId = null; this.targetSeat = null; this.standCooldown = .8; this.stationary = 0;
   }
-  stand() { this.leaveSeat(); this.path = []; this.hint = "Você levantou. Clique para ir a outro lugar."; }
+  stand() { this.leaveSeat(); this.path = []; this.hint = "Você levantou. Clique duas vezes para ir a outro lugar."; }
   walkTo(point: Point, input: WorldInput = {}) {
     if (input.active === false) return;
     const seat = this.seats.filter((s) => Math.hypot(s.x - point.x, s.y - point.y) < .85)
       .sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y))[0];
     if (seat && input.occupied?.has(seat.id)) { this.hint = "Esta cadeira já está ocupada."; return; }
     const destination = seat ?? point;
-    const blockers = this.blockers(input.extraBlockers, true);
+    const blockers = this.blockers(this.inputBlockers(input), true);
     const path = navigate(this.position, destination, blockers, this.layout.mapCols, this.layout.mapRows);
     if (!path.length) { this.hint = "Sem passagem até esse ponto. Escolha o chão ou uma cadeira acessível."; this.path = []; return; }
     this.leaveSeat(); this.path = path; this.targetSeat = seat?.id ?? null;
@@ -56,7 +78,7 @@ export class OfficeSimulation {
     if (seat) this.walkTo(seat, input);
   }
   private nearbySeat(input: WorldInput, distance: number) {
-    const blockers = this.blockers(input.extraBlockers);
+    const blockers = this.blockers(this.inputBlockers(input));
     return this.seats.filter((seat) => !input.occupied?.has(seat.id)
       && Math.hypot(seat.x - this.position.x, seat.y - this.position.y) <= distance
       && this.clear(this.position, seat, blockers))
@@ -80,7 +102,7 @@ export class OfficeSimulation {
     let vx = Number(keys.has("right")) - Number(keys.has("left")), vy = Number(keys.has("down")) - Number(keys.has("up"));
     const keyboard = vx !== 0 || vy !== 0;
     if (keyboard) { this.path = []; this.targetSeat = null; if (this.sitting) this.leaveSeat(); }
-    const blockers = this.blockers(input.extraBlockers);
+    const blockers = this.blockers(this.inputBlockers(input));
     const before = this.position;
     if (keyboard) {
       const length = Math.hypot(vx, vy);
@@ -111,8 +133,8 @@ export class OfficeSimulation {
         ? requested : this.standCooldown === 0 && this.stationary > .25 ? this.nearbySeat(input, .8) : undefined;
       if (seat) {
         this.position = { x: seat.x, y: seat.y }; this.sitting = true; this.seatId = seat.id; this.targetSeat = null;
-        this.direction = seat.direction; this.moving = false; this.hint = "Sentado · E para levantar, ou clique para andar.";
-      } else if (!this.sitting && this.stationary > .25) this.hint = "Clique no chão para andar ou em uma cadeira para sentar.";
+        this.direction = seat.direction; this.moving = false; this.hint = "Sentado · E para levantar, ou clique duas vezes para andar.";
+      } else if (!this.sitting && this.stationary > .25) this.hint = "Clique duas vezes no chão para andar ou em uma cadeira para sentar.";
     }
   }
   state(): MovementState {

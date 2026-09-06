@@ -79,6 +79,20 @@ test('occupied seats are not taken and releasing a seat does not instantly sit a
   sim.stand(); sim.tick(.1); assert.equal(sim.sitting, false);
 });
 
+test('a newly locked table lets people already inside leave but blocks re-entry', () => {
+  const sim = new OfficeSimulation(layout);
+  const center = { ...sim.position };
+  const zone = { id: 'table-lock-1', rect: { x: center.x - 1, y: center.y - 1, w: 2, h: 2 } };
+  const input = { restrictedZones: [zone] };
+  const outside = { x: center.x - 3, y: center.y };
+  sim.walkTo(outside, input);
+  assert.ok(sim.path.length, 'an occupant must be allowed to plan an exit');
+  tickUntilIdle(sim, input);
+  assert.ok(Math.hypot(sim.position.x - outside.x, sim.position.y - outside.y) < .1);
+  sim.walkTo(center, input);
+  assert.equal(sim.path.length, 0, 'the same locked area must block re-entry');
+});
+
 test('swept keyboard movement cannot tunnel through walls or leave the map, and paused movement stops', () => {
   assert.ok(moveSafely({ x: 2, y: 2 }, 20, 0, [{ x: 3, y: 0, w: .4, h: 8 }], 10, 10).x < 3);
   assert.ok(moveSafely({ x: 1, y: 1 }, -20, -20, [], 10, 10).x >= .28);

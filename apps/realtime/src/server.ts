@@ -48,7 +48,7 @@ const avatarInput = z.object({
   accessory: z.enum(["none", "glasses", "headphones"]),
 }).strict();
 type Avatar = z.infer<typeof avatarInput>;
-type Presence = { userId: string; name: string; avatar?: Avatar; photo?: string | null; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; seatLocked: boolean; updatedAt: number };
+type Presence = { userId: string; name: string; avatar?: Avatar; photo?: string | null; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; lockId: string | null; updatedAt: number };
 const directionInput = z.enum(["up", "down", "left", "right"]);
 const photoInput = z.string().max(30_000).regex(/^data:image\/(png|jpeg|webp);base64,/).nullable();
 
@@ -60,9 +60,13 @@ const presenceInput = z.object({
   moving: z.boolean().default(false),
   sitting: z.boolean().default(false),
   seatId: z.string().nullable().default(null),
-  seatLocked: z.boolean().default(false),
+  lockId: z.string().min(1).max(80).nullable().default(null),
 });
-const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true, seatId: true, seatLocked: true });
+const positionInput = presenceInput.pick({ x: true, y: true, direction: true, moving: true, sitting: true, seatId: true, lockId: true });
+const userActionInput = z.object({ targetId: z.string().min(1).max(100) });
+const accessRequestInput = z.object({ ownerId: z.string().min(1).max(100), lockId: z.string().min(1).max(80) });
+const accessResponseInput = z.object({ requesterId: z.string().min(1).max(100), lockId: z.string().min(1).max(80), approved: z.boolean() });
+const comeResponseInput = z.object({ requesterId: z.string().min(1).max(100), approved: z.boolean() });
 
 let redis: RedisClientType | null = null;
 const localPresence = new Map<string, Map<string, Presence>>();
@@ -83,6 +87,7 @@ async function configureRedis() {
 }
 
 function workspaceChannel(workspaceId: string) { return `workspace:${workspaceId}`; }
+function userChannel(workspaceId: string, userId: string) { return `workspace:${workspaceId}:user:${userId}`; }
 function presenceKey(workspaceId: string) { return `orbit:presence:${workspaceId}`; }
 function seenKey(workspaceId: string) { return `orbit:presence-seen:${workspaceId}`; }
 
@@ -154,7 +159,7 @@ io.on("connection", async (rawSocket) => {
   const userId = claims.sub!;
   const channel = workspaceChannel(workspaceId);
   let current: Presence | null = null;
-  await socket.join(channel);
+  await socket.join([channel, userChannel(workspaceId, userId)]);
   socket.emit("presence:snapshot", await getPresence(workspaceId));
 
   socket.on("presence:join", async (payload) => {
@@ -166,7 +171,7 @@ io.on("connection", async (rawSocket) => {
       userId, name: claims.name,
       avatar: avatar.success ? avatar.data : undefined,
       photo: photo.success ? photo.data : null,
-      ...parsed.data, updatedAt: Date.now(),
+      ...parsed.data, lockId: parsed.data.sitting ? parsed.data.lockId : null, updatedAt: Date.now(),
     };
     await savePresence(workspaceId, current);
     socket.to(channel).emit("presence:upsert", current);
@@ -176,9 +181,11 @@ io.on("connection", async (rawSocket) => {
     if (!current || !withinRateLimit(socket)) return;
     const parsed = positionInput.safeParse(payload);
     if (!parsed.success) return;
-    current = { ...current, ...parsed.data, updatedAt: Date.now() };
+    const reliable = current.sitting !== parsed.data.sitting || current.seatId !== parsed.data.seatId || current.lockId !== parsed.data.lockId;
+    current = { ...current, ...parsed.data, lockId: parsed.data.sitting ? parsed.data.lockId : null, updatedAt: Date.now() };
     await savePresence(workspaceId, current);
-    socket.to(channel).volatile.emit("presence:upsert", current);
+    if (reliable) socket.to(channel).emit("presence:upsert", current);
+    else socket.to(channel).volatile.emit("presence:upsert", current);
   });
 
   socket.on("avatar:update", async (payload) => {
@@ -197,6 +204,60 @@ io.on("connection", async (rawSocket) => {
     current = { ...current, photo: parsed.data, updatedAt: Date.now() };
     await savePresence(workspaceId, current);
     socket.to(channel).emit("presence:upsert", current);
+  });
+
+  socket.on("table:access-request", async (payload) => {
+    if (!current || !withinRateLimit(socket)) return;
+    const parsed = accessRequestInput.safeParse(payload);
+    if (!parsed.success || parsed.data.ownerId === userId) return;
+    const owner = (await getPresence(workspaceId)).find((person) => person.userId === parsed.data.ownerId);
+    if (!owner?.sitting || owner.lockId !== parsed.data.lockId) return;
+    io.to(userChannel(workspaceId, owner.userId)).emit("table:access-requested", {
+      requesterId: userId,
+      requesterName: current.name,
+      lockId: owner.lockId,
+    });
+  });
+
+  socket.on("table:access-response", async (payload) => {
+    if (!current || !withinRateLimit(socket)) return;
+    const parsed = accessResponseInput.safeParse(payload);
+    if (!parsed.success || !current.sitting || current.lockId !== parsed.data.lockId) return;
+    const requester = (await getPresence(workspaceId)).find((person) => person.userId === parsed.data.requesterId);
+    if (!requester) return;
+    io.to(userChannel(workspaceId, requester.userId)).emit("table:access-resolved", {
+      ownerId: userId,
+      ownerName: current.name,
+      lockId: current.lockId,
+      approved: parsed.data.approved,
+    });
+  });
+
+  socket.on("presence:come-request", async (payload) => {
+    if (!current || !withinRateLimit(socket)) return;
+    const parsed = userActionInput.safeParse(payload);
+    if (!parsed.success || parsed.data.targetId === userId) return;
+    const target = (await getPresence(workspaceId)).find((person) => person.userId === parsed.data.targetId);
+    if (!target) return;
+    io.to(userChannel(workspaceId, target.userId)).emit("presence:come-requested", {
+      requesterId: userId,
+      requesterName: current.name,
+      x: current.x,
+      y: current.y,
+    });
+  });
+
+  socket.on("presence:come-response", async (payload) => {
+    if (!current || !withinRateLimit(socket)) return;
+    const parsed = comeResponseInput.safeParse(payload);
+    if (!parsed.success) return;
+    const requester = (await getPresence(workspaceId)).find((person) => person.userId === parsed.data.requesterId);
+    if (!requester) return;
+    io.to(userChannel(workspaceId, requester.userId)).emit("presence:come-resolved", {
+      targetId: userId,
+      targetName: current.name,
+      approved: parsed.data.approved,
+    });
   });
 
   const heartbeat = setInterval(async () => {

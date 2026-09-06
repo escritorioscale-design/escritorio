@@ -64,6 +64,7 @@ export type SelfPerson = { name: string; photo?: string | null };
  * doubles as the answer to "am I on camera right now?". */
 function ProximityVideoTiles({ nearby, self }: { nearby: NearbyPerson[]; self: SelfPerson }) {
   const cameraTracks = useTracks([Track.Source.Camera]);
+  if (!nearby.length) return null;
   const selfTrack = cameraTracks.find((track) => track.participant.isLocal);
   const tiles = [
     ...(selfTrack ? [{ userId: "self", name: self.name, photo: self.photo, isSelf: true }] : []),
