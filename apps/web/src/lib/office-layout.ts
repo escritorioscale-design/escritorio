@@ -9,6 +9,8 @@
 // breaks if that file's room shapes or asset keys change — every key used
 // below is one of this module's own ITEM_KEYS.
 
+import { navigate } from "./office-navigation.ts";
+
 export const TILE = 32;
 export const WALL_THICKNESS = 0.4;
 export const DOOR_WIDTH = 2.5;
@@ -24,6 +26,7 @@ export type RoomKind = "MEETING" | "DIRECTOR" | "FOCUS" | "CREATIVE" | "AUDITORI
 
 export type LayoutRoom = {
   id: string;
+  parentId?: string;
   kind: RoomKind;
   name: string;
   x: number; y: number; w: number; h: number;
@@ -95,7 +98,7 @@ const FOOTPRINT: Record<string, { w: number; h: number }> = {
   "desk-cubicle": { w: 3.2, h: 1.6 },
   "desk-cubicle-dark": { w: 4.4, h: 2.2 },
   "desk-plain": { w: 3.2, h: 1.6 },
-  "table-long": { w: 4.8, h: 1.8 },
+  "table-long": { w: 6.8, h: 2.8 },
   sofa: { w: 5.2, h: 1.8 },
   cabinet: { w: 1.6, h: 1.2 },
   bookshelf: { w: 1.6, h: 1.2 },
@@ -144,7 +147,8 @@ export function furnitureCollider(piece: LayoutFurniture): Rect | null {
   if (piece.collides) return piece.collides;
   const footprint = FOOTPRINT[piece.key];
   if (!footprint) return null;
-  return { x: piece.x - footprint.w / 2, y: piece.y - footprint.h / 2, w: footprint.w, h: footprint.h };
+  const scale = piece.scale ?? 1;
+  return { x: piece.x - footprint.w * scale / 2, y: piece.y - footprint.h * scale / 2, w: footprint.w * scale, h: footprint.h * scale };
 }
 
 export function findRoom(layout: OfficeLayout, id: string): LayoutRoom | undefined {
@@ -159,6 +163,10 @@ export function doorX(room: LayoutRoom) {
 }
 export function doorY(room: LayoutRoom) {
   return doorAtBottom(room) ? room.y + room.h : room.y;
+}
+export function doorWidth(room: LayoutRoom) { return Math.min(DOOR_WIDTH, Math.max(1, room.w - 2)); }
+export function doorRect(room: LayoutRoom): Rect {
+  return { x: doorX(room) - doorWidth(room) / 2, y: doorAtBottom(room) ? doorY(room) - WALL_THICKNESS : doorY(room), w: doorWidth(room), h: WALL_THICKNESS };
 }
 export function doorApproach(room: LayoutRoom, offset = 1.4) {
   const y = doorY(room);
@@ -235,220 +243,91 @@ export function openDoorsForPosition(layout: OfficeLayout, x: number, y: number)
   return new Set(layout.rooms.filter((room) => {
     if (room.locked) return false;
     const dx = doorX(room), dy = doorY(room);
-    return Math.hypot(dx - x, dy - y) <= 3 || isInsideRoom(x, y, room);
+    return Math.abs(dx - x) <= doorWidth(room) / 2 + .75 && Math.abs(dy - y) <= 2.2;
   }).map((room) => room.id));
 }
 
-// ---------------------------------------------------------------------------
-// Pathfinding — a plain grid A* over half-tile cells. Layouts are free-form
-// (rooms can be anywhere an admin puts them), so a fixed "shared corridor"
-// waypoint heuristic doesn't generalize; this works for any layout. Every
-// unlocked door is treated as passable (it opens on approach in practice,
-// per `openDoorsForPosition`) — a locked room's door stays a solid wall
-// segment, so no path can be found through it.
-const CELL = 0.5;
-
-function buildBlockedGrid(layout: OfficeLayout, cols: number, rows: number, extraBlockers: Rect[]): Uint8Array {
-  const rects = [...getWalls(layout, unlockedRoomIds(layout)), ...getFurnitureColliders(layout), ...extraBlockers];
-  const blocked = new Uint8Array(cols * rows);
-  const margin = 0.16;
-  for (const r of rects) {
-    const minGx = Math.max(0, Math.floor((r.x - margin) / CELL));
-    const maxGx = Math.min(cols - 1, Math.ceil((r.x + r.w + margin) / CELL));
-    const minGy = Math.max(0, Math.floor((r.y - margin) / CELL));
-    const maxGy = Math.min(rows - 1, Math.ceil((r.y + r.h + margin) / CELL));
-    for (let gy = minGy; gy <= maxGy; gy++) {
-      for (let gx = minGx; gx <= maxGx; gx++) blocked[gy * cols + gx] = 1;
-    }
-  }
-  return blocked;
-}
-
-function nearestOpenCell(blocked: Uint8Array, cols: number, rows: number, gx: number, gy: number): number {
-  const start = gy * cols + gx;
-  if (gx >= 0 && gx < cols && gy >= 0 && gy < rows && !blocked[start]) return start;
-  for (let radius = 1; radius < Math.max(cols, rows); radius++) {
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-        const nx = gx + dx, ny = gy + dy;
-        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
-        const idx = ny * cols + nx;
-        if (!blocked[idx]) return idx;
-      }
-    }
-  }
-  return start;
-}
-
-function simplifyPath(points: { x: number; y: number }[]): { x: number; y: number }[] {
-  if (points.length < 3) return points;
-  const out = [points[0]];
-  for (let i = 1; i < points.length - 1; i++) {
-    const a = out[out.length - 1], b = points[i], c = points[i + 1];
-    const collinear = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) < 1e-6;
-    if (!collinear) out.push(b);
-  }
-  out.push(points[points.length - 1]);
-  return out;
-}
-
-export function findPath(
-  layout: OfficeLayout, fromX: number, fromY: number, toX: number, toY: number,
-  extraBlockers: Rect[] = [],
-): { x: number; y: number }[] {
-  const cols = Math.max(1, Math.ceil(layout.mapCols / CELL));
-  const rows = Math.max(1, Math.ceil(layout.mapRows / CELL));
-  const blocked = buildBlockedGrid(layout, cols, rows, extraBlockers);
-
-  const clamp = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v / CELL)));
-  const startIdx = nearestOpenCell(blocked, cols, rows, clamp(fromX, cols), clamp(fromY, rows));
-  const goalIdx = nearestOpenCell(blocked, cols, rows, clamp(toX, cols), clamp(toY, rows));
-  if (startIdx === goalIdx) return [{ x: toX, y: toY }];
-
-  const goalGx = goalIdx % cols, goalGy = Math.floor(goalIdx / cols);
-  const heuristic = (idx: number) => {
-    const gx = idx % cols, gy = Math.floor(idx / cols);
-    return Math.hypot(gx - goalGx, gy - goalGy);
-  };
-
-  const gScore = new Float64Array(cols * rows).fill(Infinity);
-  const cameFrom = new Int32Array(cols * rows).fill(-1);
-  const visited = new Uint8Array(cols * rows);
-  gScore[startIdx] = 0;
-  // A tiny binary-heap-free open set is fine at this grid size (a few
-  // thousand cells) — this runs once per click, not per frame.
-  const open: { idx: number; f: number }[] = [{ idx: startIdx, f: heuristic(startIdx) }];
-  const neighbors = [
-    [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
-    [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
-  ] as const;
-
-  while (open.length) {
-    let bestI = 0;
-    for (let i = 1; i < open.length; i++) if (open[i].f < open[bestI].f) bestI = i;
-    const { idx: current } = open.splice(bestI, 1)[0];
-    if (current === goalIdx) break;
-    if (visited[current]) continue;
-    visited[current] = 1;
-    const cx = current % cols, cy = Math.floor(current / cols);
-    for (const [dx, dy, cost] of neighbors) {
-      const nx = cx + dx, ny = cy + dy;
-      if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
-      const nIdx = ny * cols + nx;
-      if (blocked[nIdx] || visited[nIdx]) continue;
-      if (dx !== 0 && dy !== 0 && (blocked[cy * cols + nx] || blocked[ny * cols + cx])) continue;
-      const tentative = gScore[current] + cost;
-      if (tentative < gScore[nIdx]) {
-        gScore[nIdx] = tentative;
-        cameFrom[nIdx] = current;
-        open.push({ idx: nIdx, f: tentative + heuristic(nIdx) });
-      }
-    }
-  }
-
-  if (gScore[goalIdx] === Infinity) return [{ x: toX, y: toY }];
-  const cellPath: { x: number; y: number }[] = [];
-  for (let at = goalIdx; at !== -1; at = cameFrom[at]) {
-    cellPath.push({ x: (at % cols) * CELL, y: Math.floor(at / cols) * CELL });
-  }
-  cellPath.reverse();
-  cellPath.push({ x: toX, y: toY });
-  return simplifyPath(cellPath);
-}
-
-// ---------------------------------------------------------------------------
-// Default layout — a small, sensible starting office (general meeting room,
-// creation room, manager's office, three squads) so a workspace that hasn't
-// customized anything yet still opens fully furnished. Every admin can
-// reshape this completely in the editor; this is just the seed.
-type DefaultRoom = { id: string; kind: RoomKind; name: string; x: number; y: number; w: number; h: number; doorSide: DoorSide };
-
-const DEFAULT_ROOMS: DefaultRoom[] = [
-  { id: "general", kind: "MEETING", name: "Sala geral", x: 1, y: 1, w: 14, h: 9, doorSide: "bottom" },
-  { id: "creative", kind: "CREATIVE", name: "Criação", x: 17, y: 1, w: 14, h: 9, doorSide: "bottom" },
-  { id: "manager", kind: "DIRECTOR", name: "Gerência", x: 33, y: 1, w: 14, h: 9, doorSide: "bottom" },
-  { id: "squad-1", kind: "FOCUS", name: "Squad 1", x: 1, y: 19, w: 14, h: 10, doorSide: "top" },
-  { id: "squad-2", kind: "FOCUS", name: "Squad 2", x: 17, y: 19, w: 14, h: 10, doorSide: "top" },
-  { id: "squad-3", kind: "FOCUS", name: "Squad 3", x: 33, y: 19, w: 14, h: 10, doorSide: "top" },
-];
-
-function squadDesks(room: DefaultRoom) {
-  return [
-    { x: room.x + 4.1, y: room.y + 3.3 }, { x: room.x + 9.9, y: room.y + 3.3 },
-    { x: room.x + 4.1, y: room.y + 7.2 }, { x: room.x + 9.9, y: room.y + 7.2 },
-  ];
-}
-
-function defaultRoomFurniture(room: DefaultRoom): Omit<LayoutFurniture, "id">[] {
-  if (room.kind === "MEETING") {
-    const cx = room.x + room.w / 2, cy = room.y + 5.1;
-    return [
-      { key: "table-long", x: cx, y: cy, scale: 1.25, collides: { x: cx - 4.3, y: cy - 1.1, w: 8.6, h: 2.2 } },
-      { key: "whiteboard", x: room.x + 2.1, y: room.y + 1.2, scale: 0.8 },
-      { key: "bookshelf", x: room.x + room.w - 1.5, y: room.y + 1.5, scale: 0.75 },
-      ...[-3.3, -1.1, 1.1, 3.3].flatMap((offset, index) => [
-        { key: index % 2 ? "chair-orange" : "chair-navy", x: cx + offset, y: cy - 2.1, facing: "down" as const },
-        { key: index % 2 ? "chair-navy" : "chair-orange", x: cx + offset, y: cy + 2.1, facing: "up" as const },
-      ]),
-    ];
-  }
-  if (room.kind === "CREATIVE") {
-    const cx = room.x + room.w / 2;
-    return [
-      { key: "table-long", x: cx, y: room.y + 4.8, scale: 0.9, collides: { x: cx - 4.5, y: room.y + 3.7, w: 9, h: 2.2 } },
-      { key: "table-long", x: cx, y: room.y + 7.6, scale: 0.75, collides: { x: cx - 3.5, y: room.y + 6.8, w: 7, h: 1.6 } },
-      { key: "corkboard", x: room.x + 2.3, y: room.y + 1.3, scale: 0.8 },
-      { key: "wall-art-orange", x: room.x + room.w - 2.2, y: room.y + 1.4, scale: 0.7 },
-      { key: "sofa", x: room.x + room.w - 2.1, y: room.y + 5.8, scale: 0.65, collides: { x: room.x + room.w - 4.1, y: room.y + 4.8, w: 3.8, h: 2.1 } },
-      { key: "plant-pot-a", x: room.x + 1.4, y: room.y + room.h - 1.5, scale: 0.8 },
-    ];
-  }
-  if (room.kind === "DIRECTOR") {
-    return [
-      { key: "desk-cubicle-dark", x: room.x + 7, y: room.y + 4.2, scale: 1.05, collides: { x: room.x + 4.5, y: room.y + 3.1, w: 5, h: 2.4 } },
-      { key: "monitor", x: room.x + 7, y: room.y + 3.5 },
-      { key: "chair-orange", x: room.x + 7, y: room.y + 6.4, facing: "up" },
-      { key: "sofa", x: room.x + 3, y: room.y + 7.2, scale: 0.58, collides: { x: room.x + 1.3, y: room.y + 6.1, w: 3.6, h: 2 } },
-      { key: "bookshelf", x: room.x + 12.4, y: room.y + 2.1, scale: 0.75 },
-      { key: "coffee-machine", x: room.x + 12.4, y: room.y + 7.4, scale: 0.85 },
-      { key: "plant-tree", x: room.x + 1.4, y: room.y + 1.5, scale: 0.65 },
-    ];
-  }
-  const desks = squadDesks(room).flatMap(({ x, y }, index) => [
-    { key: index % 2 ? "desk-plain" : "desk-cubicle", x, y, collides: { x: x - 1.55, y: y - 1, w: 3.1, h: 1.7 } },
-    { key: "monitor", x, y: y - 0.55 },
-    { key: "chair-navy", x, y: y + 1.35, facing: "up" as const },
-  ]);
-  return [
-    ...desks,
-    { key: "divider", x: room.x + 1.4, y: room.y + 1.5, scale: 0.7 },
-    { key: "watercooler", x: room.x + room.w - 1.4, y: room.y + 1.5, scale: 0.7 },
-  ];
+/** All callers use the same collision-aware path planner as the game loop. */
+export function findPath(layout: OfficeLayout, fromX: number, fromY: number, toX: number, toY: number, extraBlockers: Rect[] = []) {
+  return navigate({ x: fromX, y: fromY }, { x: toX, y: toY },
+    [...getWalls(layout, unlockedRoomIds(layout)), ...getFurnitureColliders(layout), ...extraBlockers],
+    layout.mapCols, layout.mapRows);
 }
 
 function buildDefaultLayout(): OfficeLayout {
-  const rooms: LayoutRoom[] = DEFAULT_ROOMS.map((room) => ({ ...room, locked: false }));
+  const rooms: LayoutRoom[] = [];
   const furniture: LayoutFurniture[] = [];
-  let counter = 0;
-  for (const room of DEFAULT_ROOMS) {
-    for (const piece of defaultRoomFurniture(room)) furniture.push({ id: `default-f${counter++}`, ...piece });
+  const add = (id: string, key: string, x: number, y: number, extra: Partial<LayoutFurniture> = {}) =>
+    furniture.push({ id, key, x, y, ...extra });
+  // Four workrooms: each contains four workstations and a private meeting room.
+  for (let index = 0; index < 4; index++) {
+    const x = index % 2 ? 29 : 2, y = index < 2 ? 2 : 24;
+    const id = `squad-${index + 1}`;
+    rooms.push({ id, name: index === 3 ? "Criação" : `Squad ${index + 1}`,
+      kind: index === 3 ? "CREATIVE" : "FOCUS", x, y, w: 24, h: 17, doorSide: index < 2 ? "bottom" : "top", locked: false });
+    const meetingY = index < 2 ? y + 2 : y + 7;
+    const meeting = { id: `${id}-meeting`, parentId: id, name: `Reunião · ${index === 3 ? "Criação" : `Squad ${index + 1}`}`,
+      kind: "MEETING" as const, x: x + 15.5, y: meetingY, w: 7, h: 8, doorSide: index < 2 ? "bottom" as const : "top" as const, locked: false };
+    rooms.push(meeting);
+    for (let desk = 0; desk < 4; desk++) {
+      const dx = x + (desk % 2 ? 11 : 4.5), dy = y + (desk < 2 ? 5 : 11.5);
+      add(`${id}-desk-${desk + 1}`, "desk-cubicle", dx, dy);
+      add(`${id}-monitor-${desk + 1}`, "monitor", dx, dy - .2, { collides: null });
+      add(`${id}-chair-${desk + 1}`, "chair-navy", dx, dy + 1.9, { facing: "up" });
+      add(`${id}-papers-${desk + 1}`, "papers", dx + 1, dy + .1, { collides: null });
+    }
+    const mx = meeting.x + meeting.w / 2, my = meeting.y + 4;
+    add(`${id}-meeting-table`, "table-long", mx, my, { scale: .6 });
+    for (const [seat, sx, sy, facing] of [
+      [1, mx - 1, my - 1.65, "down"], [2, mx + 1, my - 1.65, "down"],
+      [3, mx - 1, my + 1.65, "up"], [4, mx + 1, my + 1.65, "up"],
+    ] as const) add(`${id}-meeting-chair-${seat}`, "chair-orange", sx, sy, { facing });
+    add(`${id}-board`, "whiteboard", x + 8, y + 1.4, { collides: null });
+    add(`${id}-shelf`, "bookshelf", x + 1.4, y + 1.9);
+    add(`${id}-plant`, "plant-tree", x + 22.3, index < 2 ? y + 15 : y + 2);
+    add(`${id}-water`, "watercooler", x + 1.5, y + 15);
   }
-  return { version: 1, mapCols: 48, mapRows: 30, rooms, furniture };
+  rooms.push(
+    { id: "manager", kind: "DIRECTOR", name: "Gerência", x: 56, y: 2, w: 20, h: 17, doorSide: "bottom", locked: false },
+    { id: "general", kind: "MEETING", name: "Reunião do time", x: 56, y: 24, w: 20, h: 17, doorSide: "top", locked: false },
+  );
+  add("manager-desk", "desk-cubicle-dark", 66, 9);
+  add("manager-monitor", "monitor", 66, 8.7, { collides: null });
+  add("manager-chair", "chair-orange", 66, 11.2, { facing: "up" });
+  add("manager-sofa", "sofa", 60, 14);
+  add("manager-shelf", "bookshelf", 58, 4);
+  add("manager-plant", "plant-tree", 73.5, 15.5);
+  add("manager-board", "whiteboard", 66, 3.5, { collides: null });
+  add("general-table", "table-long", 66, 32.5, { scale: 1.6 });
+  for (let i = 0; i < 6; i++) {
+    add(`general-chair-n-${i}`, "chair-navy", 60.75 + i * 2.1, 29.7, { facing: "down" });
+    add(`general-chair-s-${i}`, "chair-navy", 60.75 + i * 2.1, 35.3, { facing: "up" });
+  }
+  add("general-board", "whiteboard", 70, 25.5, { collides: null });
+  add("general-plant", "plant-tree", 74, 38.5);
+  add("general-water", "watercooler", 58, 38.5);
+  add("hall-plant-left", "plant-tree", 3.5, 21.5);
+  add("hall-plant-right", "plant-tree", 74.5, 21.5);
+  return { version: 2, mapCols: 78, mapRows: 43, rooms, furniture };
 }
 
-export const DEFAULT_OFFICE_LAYOUT: OfficeLayout = buildDefaultLayout();
-
-export function cloneLayout(layout: OfficeLayout): OfficeLayout {
-  return JSON.parse(JSON.stringify(layout)) as OfficeLayout;
-}
-
-/** Loose shape check for a `Space.mapData` JSON blob — a workspace that
- * hasn't customized anything yet has whatever was seeded at creation, not
- * this shape, so callers should fall back to `DEFAULT_OFFICE_LAYOUT`. */
+export const DEFAULT_OFFICE_LAYOUT = buildDefaultLayout();
+export function cloneLayout(layout: OfficeLayout): OfficeLayout { return JSON.parse(JSON.stringify(layout)) as OfficeLayout; }
 export function isOfficeLayout(value: unknown): value is OfficeLayout {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<OfficeLayout>;
   return Array.isArray(candidate.rooms) && Array.isArray(candidate.furniture)
     && typeof candidate.mapCols === "number" && typeof candidate.mapRows === "number";
+}
+
+/** Upgrade only the old unedited seed, never a customer's custom floorplan. */
+export function resolveOfficeLayout(layout?: OfficeLayout): OfficeLayout {
+  if (!layout) return DEFAULT_OFFICE_LAYOUT;
+  const value = JSON.stringify([layout.mapCols, layout.mapRows,
+    layout.rooms.map(r => [r.id, r.name, r.kind, r.x, r.y, r.w, r.h, r.doorSide, r.locked]),
+    layout.furniture.map(f => [f.id, f.key, f.x, f.y, f.scale ?? 1, f.facing ?? null, f.collides ?? null])]);
+  let fingerprint = 2166136261;
+  for (const character of value) fingerprint = Math.imul(fingerprint ^ character.charCodeAt(0), 16777619);
+  const oldSeed = layout.version === 1 && (fingerprint >>> 0).toString(16) === "b4adb066";
+  return oldSeed ? DEFAULT_OFFICE_LAYOUT : layout;
 }

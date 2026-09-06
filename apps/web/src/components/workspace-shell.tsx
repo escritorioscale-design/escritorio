@@ -18,7 +18,7 @@ import { OfficeEditor } from "@/components/office-editor";
 import { canHear, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
-import { DEFAULT_OFFICE_LAYOUT, SEAT_LOCK_RADIUS, type OfficeLayout, type Rect } from "@/lib/office-layout";
+import { resolveOfficeLayout, SEAT_LOCK_RADIUS, type OfficeLayout, type Rect } from "@/lib/office-layout";
 import {
   AVATAR_ACCESSORIES,
   AVATAR_BODY_TYPES,
@@ -106,8 +106,10 @@ function AvatarSwatches({ values, value, onChange, label }: {
   );
 }
 
+const CONNECTION_LABEL = { online: "Tempo real conectado", connecting: "Conectando…", offline: "Modo offline" } as const;
+
 export function WorkspaceShell({ user, organization, workspace, space, rooms, officeLayout }: Props) {
-  const [layout, setLayout] = useState<OfficeLayout>(() => officeLayout ?? DEFAULT_OFFICE_LAYOUT);
+  const [layout, setLayout] = useState<OfficeLayout>(() => resolveOfficeLayout(officeLayout));
   const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
   const canEditLayout = organization.role === "owner" || organization.role === "admin";
   const [position, setPosition] = useState({ x: 49, y: 50 });
@@ -246,6 +248,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   }, [workspace.id]);
 
   const handleLocalUpdate = useCallback((state: LocalMoveState) => {
+    const changedActivity = state.moving !== movingRef.current || state.sitting !== sittingRef.current || state.seatId !== seatIdRef.current;
     const next = { x: state.xPercent, y: state.yPercent };
     positionRef.current = next;
     setPosition(next);
@@ -267,7 +270,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
       }
     }
     seatIdRef.current = state.seatId;
-    emitMovement(next, state.direction, state.moving, false, state.sitting, state.seatId);
+    emitMovement(next, state.direction, state.moving, changedActivity, state.sitting, state.seatId);
   }, [emitMovement]);
 
   const selfSeatState = useMemo(() => ({ sitting, seatLocked }), [sitting, seatLocked]);
@@ -439,11 +442,14 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
           <section className={`map-stage office-theme-${officeTheme}`}>
             <OfficeBuilder
               layout={layout}
+              peers={Object.values(people)}
               theme={officeTheme}
               occupiedSeatIds={occupiedSeatIds}
               lockedZones={lockedZones}
               onUpdate={handleLocalUpdate}
               active={!editorOpen && !officeEditorOpen && !layoutEditorOpen}
+              showStatus
+              live={{ tone: connection, label: CONNECTION_LABEL[connection] }}
             >
               {Object.values(people).map((person) => (
                 <div
@@ -473,10 +479,6 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 <label>Você</label>
               </div>
             </OfficeBuilder>
-            <div className="movement-help"><span>WASD</span><span>↑ ↓ ← →</span><b>ou clique para andar</b></div>
-            <div className={`connection-pill ${connection}`}>
-              {connection === "online" ? "Tempo real conectado" : connection === "connecting" ? "Conectando…" : "Modo offline"}
-            </div>
             <div className="proximity-controls">
               <button
                 type="button"

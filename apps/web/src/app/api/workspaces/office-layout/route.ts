@@ -7,6 +7,7 @@ const rectSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.
 
 const roomSchema = z.object({
   id: z.string().min(1),
+  parentId: z.string().optional(),
   kind: z.enum(["MEETING", "DIRECTOR", "FOCUS", "CREATIVE", "AUDITORIUM", "CUSTOM"]),
   name: z.string().min(1).max(60),
   x: z.number(), y: z.number(), w: z.number().min(4), h: z.number().min(4),

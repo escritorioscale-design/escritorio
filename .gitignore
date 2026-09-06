@@ -10,6 +10,11 @@ packages/db/src/generated/
 .DS_Store
 .neon
 *.tsbuildinfo
+.tmp/
 
 .vercel
 .env*
+
+# Pacotes de arte licenciados (fonte dos sprites; os PNGs extraidos ficam em public/)
+*.rar
+*.zip

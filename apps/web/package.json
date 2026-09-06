@@ -7,7 +7,8 @@
     "prebuild": "npm run generate -w @orbit/db",
     "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:office": "node --test tests/office-simulation.test.mjs"
   },
   "dependencies": {
     "@livekit/components-react": "2.9.24",

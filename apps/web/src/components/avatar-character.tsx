@@ -154,10 +154,15 @@ function LimeZuCharacter({ skin, direction, moving, sitting, compact }: {
         ctx!.clearRect(0, 0, FRAME_SIZE, FRAME_SIZE);
         const dir = directionRef.current;
         if (sittingRef.current) {
-          // The free pack ships no back-facing sit pose; the front-facing one
-          // reads fine as a stand-in for seats that face up.
-          const sitImg = dir === "left" ? sitLeft : dir === "right" ? sitRight : sitDown;
-          drawSprite(ctx!, sitImg, 0, sitImg.naturalWidth, sitImg.naturalHeight);
+          if (dir === "up") {
+            // The back-facing torso aligns with the cushion; the chair hides
+            // the legs. A front-facing sit would turn the user away from work.
+            drawSprite(ctx!, idle, LIMEZU_DIRECTION_COL.up * LIMEZU_FRAME_W, LIMEZU_FRAME_W, LIMEZU_FRAME_H);
+            ctx!.clearRect(0, 46, FRAME_SIZE, FRAME_SIZE - 46);
+          } else {
+            const sitImg = dir === "left" ? sitLeft : dir === "right" ? sitRight : sitDown;
+            drawSprite(ctx!, sitImg, 0, sitImg.naturalWidth, sitImg.naturalHeight);
+          }
         } else if (movingRef.current) {
           if (timestamp - lastStep > LIMEZU_WALK_FRAME_MS) {
             frame = (frame + 1) % LIMEZU_RUN_FRAMES;
