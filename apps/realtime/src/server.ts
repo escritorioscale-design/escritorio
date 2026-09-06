@@ -49,6 +49,13 @@ const avatarInput = z.object({
 }).strict();
 type Avatar = z.infer<typeof avatarInput>;
 type Presence = { userId: string; name: string; avatar?: Avatar; photo?: string | null; x: number; y: number; status: string; direction: Direction; moving: boolean; sitting: boolean; seatId: string | null; lockId: string | null; updatedAt: number };
+type MediaTrackKind = "audio" | "video";
+type MediaPublication = {
+  userId: string;
+  name: string;
+  sessionId: string;
+  tracks: { trackName: string; kind: MediaTrackKind }[];
+};
 const directionInput = z.enum(["up", "down", "left", "right"]);
 const photoInput = z.string().max(30_000).regex(/^data:image\/(png|jpeg|webp);base64,/).nullable();
 
@@ -67,9 +74,75 @@ const userActionInput = z.object({ targetId: z.string().min(1).max(100) });
 const accessRequestInput = z.object({ ownerId: z.string().min(1).max(100), lockId: z.string().min(1).max(80) });
 const accessResponseInput = z.object({ requesterId: z.string().min(1).max(100), lockId: z.string().min(1).max(80), approved: z.boolean() });
 const comeResponseInput = z.object({ requesterId: z.string().min(1).max(100), approved: z.boolean() });
+const mediaDescriptionInput = z.object({
+  type: z.enum(["offer", "answer"]),
+  sdp: z.string().min(1).max(1_000_000),
+});
+const mediaPublishInput = z.object({
+  sessionDescription: mediaDescriptionInput,
+  tracks: z.array(z.object({
+    mid: z.string().max(32).nullable(),
+    trackName: z.string().min(1).max(160),
+    kind: z.enum(["audio", "video"]),
+  })).min(1).max(2),
+});
+const mediaPullInput = z.object({
+  sessionId: z.string().min(1).max(160),
+  audioUserIds: z.array(z.string().min(1).max(100)).max(24),
+  videoUserIds: z.array(z.string().min(1).max(100)).max(3),
+});
+const mediaRenegotiateInput = z.object({
+  sessionId: z.string().min(1).max(160),
+  sessionDescription: mediaDescriptionInput,
+});
 
 let redis: RedisClientType | null = null;
 const localPresence = new Map<string, Map<string, Presence>>();
+const mediaPublications = new Map<string, Map<string, MediaPublication>>();
+const mediaSessions = new Map<string, { publisher?: string; subscribers: Set<string> }>();
+
+function cloudflareMediaConfigured() {
+  return process.env.MEDIA_PROVIDER === "cloudflare"
+    && Boolean(process.env.CLOUDFLARE_REALTIME_APP_ID)
+    && Boolean(process.env.CLOUDFLARE_REALTIME_APP_SECRET);
+}
+
+async function cloudflareRequest(path: string, method: "POST" | "PUT", body?: unknown) {
+  const appId = process.env.CLOUDFLARE_REALTIME_APP_ID;
+  const appSecret = process.env.CLOUDFLARE_REALTIME_APP_SECRET;
+  if (!cloudflareMediaConfigured() || !appId || !appSecret) throw new Error("cloudflare_media_not_configured");
+  const response = await fetch(`https://rtc.live.cloudflare.com/v1/apps/${appId}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${appSecret}`,
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const result = await response.json() as Record<string, unknown>;
+  if (!response.ok || result.errorCode) {
+    console.error("[cloudflare-realtime] request failed", response.status, result.errorCode ?? "unknown");
+    throw new Error("cloudflare_media_request_failed");
+  }
+  return result;
+}
+
+function mediaCatalog(workspaceId: string) {
+  return [...(mediaPublications.get(workspaceId)?.values() ?? [])];
+}
+
+function broadcastMediaCatalog(workspaceId: string) {
+  io.to(workspaceChannel(workspaceId)).emit("media:catalog", mediaCatalog(workspaceId));
+}
+
+function clearMediaPublication(workspaceId: string, userId: string, sessionId?: string) {
+  const publications = mediaPublications.get(workspaceId);
+  const current = publications?.get(userId);
+  if (!current || (sessionId && current.sessionId !== sessionId)) return;
+  publications?.delete(userId);
+  if (!publications?.size) mediaPublications.delete(workspaceId);
+  broadcastMediaCatalog(workspaceId);
+}
 
 async function configureRedis() {
   if (!process.env.REDIS_URL) {
@@ -159,8 +232,10 @@ io.on("connection", async (rawSocket) => {
   const userId = claims.sub!;
   const channel = workspaceChannel(workspaceId);
   let current: Presence | null = null;
+  mediaSessions.set(socket.id, { subscribers: new Set() });
   await socket.join([channel, userChannel(workspaceId, userId)]);
   socket.emit("presence:snapshot", await getPresence(workspaceId));
+  socket.emit("media:catalog", mediaCatalog(workspaceId));
 
   socket.on("presence:join", async (payload) => {
     const parsed = presenceInput.safeParse(payload);
@@ -260,6 +335,142 @@ io.on("connection", async (rawSocket) => {
     });
   });
 
+  socket.on("media:catalog:get", () => {
+    socket.emit("media:catalog", mediaCatalog(workspaceId));
+  });
+
+  socket.on("media:publisher:create", async (acknowledge) => {
+    if (!withinRateLimit(socket) || typeof acknowledge !== "function") return;
+    try {
+      const result = await cloudflareRequest("/sessions/new", "POST");
+      const sessionId = z.string().min(1).parse(result.sessionId);
+      const state = mediaSessions.get(socket.id);
+      if (!state) throw new Error("media_session_missing");
+      if (state.publisher) clearMediaPublication(workspaceId, userId, state.publisher);
+      state.publisher = sessionId;
+      acknowledge({ ok: true, sessionId });
+    } catch {
+      acknowledge({ ok: false, error: "media_unavailable" });
+    }
+  });
+
+  socket.on("media:publisher:publish", async (payload, acknowledge) => {
+    if (!withinRateLimit(socket) || typeof acknowledge !== "function") return;
+    const parsed = mediaPublishInput.safeParse(payload);
+    const publisherSession = mediaSessions.get(socket.id)?.publisher;
+    if (!parsed.success || !publisherSession) {
+      acknowledge({ ok: false, error: "invalid_request" });
+      return;
+    }
+    try {
+      const result = await cloudflareRequest(`/sessions/${publisherSession}/tracks/new`, "POST", {
+        sessionDescription: parsed.data.sessionDescription,
+        tracks: parsed.data.tracks.map(({ mid, trackName }) => ({ location: "local", mid, trackName })),
+      });
+      const publications = mediaPublications.get(workspaceId) ?? new Map<string, MediaPublication>();
+      publications.set(userId, {
+        userId,
+        name: claims.name,
+        sessionId: publisherSession,
+        tracks: parsed.data.tracks.map(({ trackName, kind }) => ({ trackName, kind })),
+      });
+      mediaPublications.set(workspaceId, publications);
+      broadcastMediaCatalog(workspaceId);
+      acknowledge({ ok: true, result });
+    } catch {
+      acknowledge({ ok: false, error: "media_unavailable" });
+    }
+  });
+
+  socket.on("media:publisher:clear", () => {
+    const state = mediaSessions.get(socket.id);
+    if (!state?.publisher) return;
+    clearMediaPublication(workspaceId, userId, state.publisher);
+    state.publisher = undefined;
+  });
+
+  socket.on("media:subscriber:create", async (acknowledge) => {
+    if (!withinRateLimit(socket) || typeof acknowledge !== "function") return;
+    try {
+      const result = await cloudflareRequest("/sessions/new", "POST");
+      const sessionId = z.string().min(1).parse(result.sessionId);
+      const state = mediaSessions.get(socket.id);
+      if (!state) throw new Error("media_session_missing");
+      state.subscribers.add(sessionId);
+      acknowledge({ ok: true, sessionId });
+    } catch {
+      acknowledge({ ok: false, error: "media_unavailable" });
+    }
+  });
+
+  socket.on("media:subscriber:pull", async (payload, acknowledge) => {
+    if (!withinRateLimit(socket) || typeof acknowledge !== "function") return;
+    const parsed = mediaPullInput.safeParse(payload);
+    const state = mediaSessions.get(socket.id);
+    if (!parsed.success || !state?.subscribers.has(parsed.data.sessionId)) {
+      acknowledge({ ok: false, error: "invalid_request" });
+      return;
+    }
+    const audioUsers = new Set(parsed.data.audioUserIds);
+    const videoUsers = new Set(parsed.data.videoUserIds);
+    const requestedTracks = mediaCatalog(workspaceId).flatMap((publication) => publication.userId === userId
+      ? []
+      : publication.tracks.flatMap((track) => {
+          const allowed = track.kind === "audio" ? audioUsers.has(publication.userId) : videoUsers.has(publication.userId);
+          return allowed ? [{
+            location: "remote" as const,
+            sessionId: publication.sessionId,
+            trackName: track.trackName,
+            userId: publication.userId,
+            name: publication.name,
+            kind: track.kind,
+          }] : [];
+        }));
+    if (!requestedTracks.length) {
+      acknowledge({ ok: true, empty: true, bindings: [] });
+      return;
+    }
+    try {
+      const result = await cloudflareRequest(`/sessions/${parsed.data.sessionId}/tracks/new`, "POST", {
+        tracks: requestedTracks.map(({ location, sessionId, trackName }) => ({ location, sessionId, trackName })),
+      });
+      const responseTracks = Array.isArray(result.tracks) ? result.tracks as Record<string, unknown>[] : [];
+      const bindings = requestedTracks.map((track, index) => ({
+        userId: track.userId,
+        name: track.name,
+        kind: track.kind,
+        mid: typeof responseTracks[index]?.mid === "string" ? responseTracks[index].mid : null,
+      }));
+      acknowledge({
+        ok: true,
+        result: {
+          sessionDescription: result.sessionDescription,
+          requiresImmediateRenegotiation: result.requiresImmediateRenegotiation,
+        },
+        bindings,
+      });
+    } catch {
+      acknowledge({ ok: false, error: "media_unavailable" });
+    }
+  });
+
+  socket.on("media:subscriber:renegotiate", async (payload, acknowledge) => {
+    if (!withinRateLimit(socket) || typeof acknowledge !== "function") return;
+    const parsed = mediaRenegotiateInput.safeParse(payload);
+    if (!parsed.success || !mediaSessions.get(socket.id)?.subscribers.has(parsed.data.sessionId)) {
+      acknowledge({ ok: false, error: "invalid_request" });
+      return;
+    }
+    try {
+      await cloudflareRequest(`/sessions/${parsed.data.sessionId}/renegotiate`, "PUT", {
+        sessionDescription: parsed.data.sessionDescription,
+      });
+      acknowledge({ ok: true });
+    } catch {
+      acknowledge({ ok: false, error: "media_unavailable" });
+    }
+  });
+
   const heartbeat = setInterval(async () => {
     if (!current) return;
     current.updatedAt = Date.now();
@@ -268,6 +479,9 @@ io.on("connection", async (rawSocket) => {
 
   socket.on("disconnect", async () => {
     clearInterval(heartbeat);
+    const mediaState = mediaSessions.get(socket.id);
+    if (mediaState?.publisher) clearMediaPublication(workspaceId, userId, mediaState.publisher);
+    mediaSessions.delete(socket.id);
     await removePresence(workspaceId, userId);
     socket.to(channel).emit("presence:left", { userId });
   });

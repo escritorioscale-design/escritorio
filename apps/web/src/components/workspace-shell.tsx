@@ -12,6 +12,7 @@ import {
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarCharacter, type AvatarDirection } from "@/components/avatar-character";
+import { CloudflareProximityVoice } from "@/components/cloudflare-proximity-voice";
 import { InviteModal } from "@/components/invite-modal";
 import { OfficeBuilder, type LocalMoveState, type MoveCommand, type TableZoneView } from "@/components/office-builder";
 import { OfficeEditor } from "@/components/office-editor";
@@ -113,6 +114,7 @@ function AvatarSwatches({ values, value, onChange, label }: {
 }
 
 const CONNECTION_LABEL = { online: "Tempo real conectado", connecting: "Conectando…", offline: "Modo offline" } as const;
+const USE_CLOUDFLARE_MEDIA = process.env.NEXT_PUBLIC_MEDIA_PROVIDER === "cloudflare";
 
 export function WorkspaceShell({ user, organization, workspace, space, rooms, officeLayout }: Props) {
   const [layout, setLayout] = useState<OfficeLayout>(() => resolveOfficeLayout(officeLayout));
@@ -129,8 +131,8 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const [mediaError, setMediaError] = useState("");
   const [ambient, setAmbient] = useState<MediaGrant | null>(null);
   const [ambientError, setAmbientError] = useState("");
-  const [micOn, setMicOn] = useState(true);
-  const [cameraOn, setCameraOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
   const [lockId, setLockId] = useState<string | null>(null);
   const [accessGrants, setAccessGrants] = useState<Record<string, string>>({});
   const [requestedLocks, setRequestedLocks] = useState<Record<string, string>>({});
@@ -277,6 +279,11 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   }, [showFeedback, user.id, workspace.id]);
 
   useEffect(() => {
+    if (USE_CLOUDFLARE_MEDIA) {
+      setAmbient(null);
+      setAmbientError("");
+      return;
+    }
     let cancelled = false;
     async function connectAmbient() {
       try {
@@ -342,12 +349,22 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     return isRoomWide(room) ? room : null;
   }, [layout, position]);
   const nearbyForVideo = useMemo(
-    () => nearby.filter((person) => Math.hypot(
+    () => [...nearby].filter((person) => Math.hypot(
       (person.x - position.x) * layout.mapCols / 100,
       (person.y - position.y) * layout.mapRows / 100,
-    ) <= PROXIMITY_SILENT_TILES).map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
+    ) <= PROXIMITY_SILENT_TILES).sort((a, b) => Math.hypot(
+      (a.x - position.x) * layout.mapCols / 100,
+      (a.y - position.y) * layout.mapRows / 100,
+    ) - Math.hypot(
+      (b.x - position.x) * layout.mapCols / 100,
+      (b.y - position.y) * layout.mapRows / 100,
+    )).slice(0, 3).map((person) => ({ userId: person.userId, name: person.name, photo: person.photo })),
     [nearby, position, layout],
   );
+
+  useEffect(() => {
+    if (!nearby.length && cameraOn) setCameraOn(false);
+  }, [cameraOn, nearby.length]);
   // Other people's self-locked desks are temporary solid obstacles — nobody
   // else can walk into that little bubble while it's up.
   const selfTile = useMemo(() => ({ x: position.x * layout.mapCols / 100, y: position.y * layout.mapRows / 100 }), [position, layout]);
@@ -622,19 +639,21 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 type="button"
                 className={`mic-toggle ${micOn ? "on" : "off"}`}
                 onClick={() => setMicOn((current) => !current)}
+                disabled={!nearby.length}
                 aria-pressed={micOn}
-                aria-label={micOn ? "Silenciar microfone" : "Ativar microfone"}
+                aria-label={!nearby.length ? "Aproxime-se de alguém para ativar o microfone" : micOn ? "Silenciar microfone" : "Ativar microfone"}
               >
-                <Mic /> {micOn ? "Voz por proximidade ativa" : "Microfone mudo"}
+                <Mic /> {!nearby.length ? "Voz disponível por proximidade" : micOn ? "Voz por proximidade ativa" : "Microfone mudo"}
               </button>
               <button
                 type="button"
                 className={`mic-toggle ${cameraOn ? "on" : "off"}`}
                 onClick={() => setCameraOn((current) => !current)}
+                disabled={!nearby.length}
                 aria-pressed={cameraOn}
-                aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                aria-label={!nearby.length ? "Aproxime-se de alguém para ativar a câmera" : cameraOn ? "Desligar câmera" : "Ligar câmera"}
               >
-                <Camera /> {cameraOn ? "Câmera ligada" : "Câmera desligada"}
+                <Camera /> {!nearby.length ? "Câmera disponível por proximidade" : cameraOn ? "Câmera ligada" : "Câmera desligada"}
               </button>
               {sitting && selfTable && (
                 <button
@@ -659,7 +678,21 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 </button>
               )}
             </div>
-            {ambient && !media && (
+            {USE_CLOUDFLARE_MEDIA && socketRef.current && !media && nearby.length > 0 && (
+              <CloudflareProximityVoice
+                socket={socketRef.current}
+                layout={layout}
+                selfPosition={position}
+                selfSeat={selfSeatState}
+                peers={peerInfo}
+                nearby={nearbyForVideo}
+                self={{ name: user.name, photo }}
+                micOn={micOn}
+                cameraOn={cameraOn}
+                onError={setAmbientError}
+              />
+            )}
+            {!USE_CLOUDFLARE_MEDIA && ambient && !media && nearby.length > 0 && (
               <ProximityVoice
                 token={ambient.token}
                 serverUrl={ambient.serverUrl}

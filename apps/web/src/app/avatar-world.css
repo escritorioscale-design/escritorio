@@ -39,6 +39,7 @@
 .mic-toggle { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: rgba(29,29,25,.88); color: #bdf1d8; font-size: 8px; font-weight: 700; cursor: pointer; }
 .mic-toggle svg { width: 12px; }
 .mic-toggle.off { color: #ffb2b5; }
+.mic-toggle:disabled { opacity: .58; cursor: not-allowed; }
 .seat-lock-toggle.on { color: #ffd166; border-color: rgba(255,209,102,.5); }
 .table-access-button { color: #e8ddff; border-color: rgba(189,170,255,.55); }
 .table-access-button:disabled { opacity: .62; cursor: wait; }

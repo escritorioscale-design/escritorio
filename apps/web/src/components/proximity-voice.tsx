@@ -4,7 +4,7 @@ import {
   LiveKitRoom, RoomAudioRenderer, StartAudio, VideoTrack,
   useLocalParticipant, useRoomContext, useTracks,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { RoomEvent, Track, VideoPresets, VideoQuality } from "livekit-client";
 import type { OfficeLayout } from "@/lib/office-layout";
 import { useEffect } from "react";
 import {
@@ -18,19 +18,44 @@ export { audioRoomAt, canHear, isRoomWide, volumeFor, PROXIMITY_FULL_VOLUME_TILE
 
 type PeerInfo = Point & SeatState;
 
-function ProximityMixer({ layout, selfPosition, selfSeat, peers }: {
+function ProximitySubscriptions({ layout, selfPosition, selfSeat, peers, visibleUserIds }: {
   layout: OfficeLayout;
   selfPosition: Point;
   selfSeat: SeatState;
   peers: Record<string, PeerInfo>;
+  visibleUserIds: string[];
 }) {
   const room = useRoomContext();
   useEffect(() => {
-    room.remoteParticipants.forEach((participant) => {
-      const peer = peers[participant.identity];
-      participant.setVolume(peer ? volumeFor(layout, selfPosition, peer, selfSeat, peer) : 0);
-    });
-  }, [room, layout, selfPosition, selfSeat, peers]);
+    const visible = new Set(visibleUserIds);
+    const syncSubscriptions = () => {
+      room.remoteParticipants.forEach((participant) => {
+        const peer = peers[participant.identity];
+        const volume = peer ? volumeFor(layout, selfPosition, peer, selfSeat, peer) : 0;
+        const audible = volume > 0;
+        participant.setVolume(volume);
+        participant.trackPublications.forEach((publication) => {
+          const shouldSubscribe = publication.source === Track.Source.Microphone
+            ? audible
+            : publication.source === Track.Source.Camera && visible.has(participant.identity);
+          if (publication.isSubscribed !== shouldSubscribe) publication.setSubscribed(shouldSubscribe);
+          if (shouldSubscribe && publication.source === Track.Source.Camera) {
+            publication.setVideoQuality(VideoQuality.LOW);
+          }
+        });
+      });
+    };
+
+    syncSubscriptions();
+    room.on(RoomEvent.ParticipantConnected, syncSubscriptions);
+    room.on(RoomEvent.TrackPublished, syncSubscriptions);
+    room.on(RoomEvent.TrackUnpublished, syncSubscriptions);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, syncSubscriptions);
+      room.off(RoomEvent.TrackPublished, syncSubscriptions);
+      room.off(RoomEvent.TrackUnpublished, syncSubscriptions);
+    };
+  }, [room, layout, selfPosition, selfSeat, peers, visibleUserIds]);
   return null;
 }
 
@@ -47,7 +72,9 @@ function MicSwitch({ enabled, onError }: { enabled: boolean; onError?: (message:
 function CameraSwitch({ enabled, onError }: { enabled: boolean; onError?: (message: string) => void }) {
   const { localParticipant } = useLocalParticipant();
   useEffect(() => {
-    localParticipant.setCameraEnabled(enabled).catch(() => {
+    localParticipant.setCameraEnabled(enabled, {
+      resolution: VideoPresets.h360.resolution,
+    }).catch(() => {
       onError?.("Não foi possível ativar a câmera. Verifique as permissões do navegador.");
     });
   }, [localParticipant, enabled, onError]);
@@ -106,10 +133,10 @@ type Props = {
   onError?: (message: string) => void;
 };
 
-/** Always-connected, audio-(and now video-)only room: hearing and seeing a
- * nearby coworker is just a matter of walking close enough, no explicit call
- * to join. */
+/** Mounted only while somebody is close enough to talk. Remote tracks are
+ * explicitly subscribed so hidden media does not keep consuming bandwidth. */
 export function ProximityVoice({ token, serverUrl, layout, selfPosition, selfSeat, peers, nearby, self, micOn, cameraOn, onError }: Props) {
+  const visibleUserIds = nearby.map((person) => person.userId);
   return (
     <LiveKitRoom
       className="proximity-room"
@@ -118,9 +145,17 @@ export function ProximityVoice({ token, serverUrl, layout, selfPosition, selfSea
       connect
       audio={false}
       video={false}
+      connectOptions={{ autoSubscribe: false }}
+      options={{ adaptiveStream: true, dynacast: true }}
       onError={() => onError?.("Não foi possível conectar à voz por proximidade.")}
     >
-      <ProximityMixer layout={layout} selfPosition={selfPosition} selfSeat={selfSeat} peers={peers} />
+      <ProximitySubscriptions
+        layout={layout}
+        selfPosition={selfPosition}
+        selfSeat={selfSeat}
+        peers={peers}
+        visibleUserIds={visibleUserIds}
+      />
       <MicSwitch enabled={micOn} onError={onError} />
       <CameraSwitch enabled={cameraOn} onError={onError} />
       <ProximityVideoTiles nearby={nearby} self={self} />

@@ -41,6 +41,7 @@ await writeFile(webEnvPath, [
   `DATABASE_URL=${databaseUrl}`,
   `REALTIME_TOKEN_SECRET=${realtimeSecret}`,
   `NEXT_PUBLIC_REALTIME_URL=http://localhost:3101`,
+  `NEXT_PUBLIC_MEDIA_PROVIDER=livekit`,
   `LIVEKIT_URL=ws://localhost:7880`,
   `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`,
   `LIVEKIT_API_KEY=devkey`,
@@ -50,6 +51,9 @@ await writeFile(webEnvPath, [
 
 await writeFile(realtimeEnvPath, [
   `REALTIME_TOKEN_SECRET=${realtimeSecret}`,
+  `MEDIA_PROVIDER=livekit`,
+  `CLOUDFLARE_REALTIME_APP_ID=`,
+  `CLOUDFLARE_REALTIME_APP_SECRET=`,
   `REDIS_URL=redis://localhost:6379`,
   `WEB_ORIGIN=http://localhost:3100`,
   `PORT=3101`,
