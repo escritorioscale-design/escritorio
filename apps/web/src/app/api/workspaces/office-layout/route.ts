@@ -24,12 +24,36 @@ const furnitureSchema = z.object({
   collides: rectSchema.nullable().optional(),
 });
 
+const httpUrlSchema = z.string().url().max(2048).refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "https:" || protocol === "http:";
+}, "Only http(s) links are allowed");
+
+const zoneEffectSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("SILENT") }),
+  z.object({ type: z.literal("CONVERSATION") }),
+  z.object({
+    type: z.literal("OPEN_LINK"),
+    url: httpUrlSchema,
+    label: z.string().min(1).max(48).optional(),
+  }),
+]);
+
+const interactionZoneSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().min(1).max(60),
+  x: z.number(), y: z.number(),
+  w: z.number().min(1), h: z.number().min(1),
+  effects: z.array(zoneEffectSchema).min(1).max(3),
+});
+
 const layoutSchema = z.object({
   version: z.number(),
   mapCols: z.number().min(10).max(200),
   mapRows: z.number().min(10).max(200),
   rooms: z.array(roomSchema).max(60),
   furniture: z.array(furnitureSchema).max(600),
+  zones: z.array(interactionZoneSchema).max(100).default([]),
 });
 
 const requestSchema = z.object({

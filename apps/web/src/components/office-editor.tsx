@@ -1,11 +1,12 @@
 "use client";
 
-import { Lock, LockOpen, Plus, Redo2, Save, Trash2, X } from "lucide-react";
+import { Focus, Link2, Lock, LockOpen, MapPinned, Plus, Redo2, Save, Trash2, VolumeX, X } from "lucide-react";
 import { useRef, useState } from "react";
 import {
   DEFAULT_OFFICE_LAYOUT, ITEM_KEYS, ROOM_KIND_LABELS,
-  cloneLayout, furnitureVisual, itemLabel,
-  type AvatarDirection, type LayoutFurniture, type LayoutRoom, type OfficeLayout, type RoomKind,
+  cloneLayout, furnitureVisual, itemLabel, safeZoneLink,
+  type AvatarDirection, type InteractionZone, type InteractionZoneEffect,
+  type LayoutFurniture, type LayoutRoom, type OfficeLayout, type RoomKind,
 } from "@/lib/office-layout";
 
 const PX = 22; // editor canvas pixels per tile — smaller than the live TILE so the whole map fits on screen
@@ -52,18 +53,22 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
   onSaved: (layout: OfficeLayout) => void;
 }) {
   const [layout, setLayout] = useState<OfficeLayout>(() => cloneLayout(initialLayout));
-  const [selected, setSelected] = useState<{ kind: "room" | "furniture"; id: string } | null>(null);
+  const [selected, setSelected] = useState<{ kind: "room" | "furniture" | "zone"; id: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const selectedRoom = selected?.kind === "room" ? layout.rooms.find((room) => room.id === selected.id) : undefined;
   const selectedFurniture = selected?.kind === "furniture" ? layout.furniture.find((piece) => piece.id === selected.id) : undefined;
+  const selectedZone = selected?.kind === "zone" ? layout.zones.find((zone) => zone.id === selected.id) : undefined;
 
   function updateRoom(id: string, patch: Partial<LayoutRoom>) {
     setLayout((current) => ({ ...current, rooms: current.rooms.map((room) => (room.id === id ? { ...room, ...patch } : room)) }));
   }
   function updateFurniture(id: string, patch: Partial<LayoutFurniture>) {
     setLayout((current) => ({ ...current, furniture: current.furniture.map((piece) => (piece.id === id ? { ...piece, ...patch } : piece)) }));
+  }
+  function updateZone(id: string, patch: Partial<InteractionZone>) {
+    setLayout((current) => ({ ...current, zones: current.zones.map((zone) => (zone.id === id ? { ...zone, ...patch } : zone)) }));
   }
 
   function addRoom() {
@@ -75,6 +80,17 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
     };
     setLayout((current) => ({ ...current, rooms: [...current.rooms, room] }));
     setSelected({ kind: "room", id: room.id });
+  }
+
+  function addZone() {
+    const zone: InteractionZone = {
+      id: newId("zone"), name: "Nova área", effects: [{ type: "CONVERSATION" }],
+      x: clamp(Math.round(layout.mapCols / 2 - 5), 0, layout.mapCols - 10),
+      y: clamp(Math.round(layout.mapRows / 2 - 4), 0, layout.mapRows - 8),
+      w: 10, h: 8,
+    };
+    setLayout((current) => ({ ...current, zones: [...current.zones, zone] }));
+    setSelected({ kind: "zone", id: zone.id });
   }
 
   function addFurniture(key: string) {
@@ -90,8 +106,31 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
   function deleteSelected() {
     if (!selected) return;
     if (selected.kind === "room") setLayout((current) => ({ ...current, rooms: current.rooms.filter((room) => room.id !== selected.id) }));
-    else setLayout((current) => ({ ...current, furniture: current.furniture.filter((piece) => piece.id !== selected.id) }));
+    else if (selected.kind === "furniture") setLayout((current) => ({ ...current, furniture: current.furniture.filter((piece) => piece.id !== selected.id) }));
+    else setLayout((current) => ({ ...current, zones: current.zones.filter((zone) => zone.id !== selected.id) }));
     setSelected(null);
+  }
+
+  function setZoneEffect(type: InteractionZoneEffect["type"], enabled: boolean) {
+    if (!selectedZone) return;
+    const without = selectedZone.effects.filter((effect) => effect.type !== type);
+    if (!enabled) {
+      // Persisted zones always do something; keep the last remaining effect.
+      if (!without.length) return;
+      updateZone(selectedZone.id, { effects: without });
+      return;
+    }
+    const effect: InteractionZoneEffect = type === "OPEN_LINK"
+      ? { type, url: "https://", label: "Abrir recurso" }
+      : { type };
+    updateZone(selectedZone.id, { effects: [...without, effect] });
+  }
+
+  function updateLinkEffect(patch: { url?: string; label?: string }) {
+    if (!selectedZone) return;
+    updateZone(selectedZone.id, {
+      effects: selectedZone.effects.map((effect) => effect.type === "OPEN_LINK" ? { ...effect, ...patch } : effect),
+    });
   }
 
   function resetToDefault() {
@@ -100,6 +139,11 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
   }
 
   async function save() {
+    const invalidLink = layout.zones.flatMap((zone) => zone.effects).find((effect) => effect.type === "OPEN_LINK" && !safeZoneLink(effect));
+    if (invalidLink) {
+      setError("Revise o link da área interativa. Use um endereço completo começando com http:// ou https://.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -125,7 +169,7 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
           <div>
             <span>EDITOR DO ESCRITÓRIO</span>
             <h2 id="office-editor-title">Personalize seu espaço</h2>
-            <p>Arraste salas e móveis, tranque portas, adicione o que quiser. Só quem é dono/admin vê este editor.</p>
+            <p>Arraste salas, móveis e áreas interativas. Combine voz, silêncio e ações contextuais sem mudar a infraestrutura.</p>
           </div>
           <div className="office-editor-actions">
             <button className="office-editor-reset" onClick={resetToDefault} type="button"><Redo2 /> Restaurar padrão</button>
@@ -138,6 +182,7 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
         <div className="office-editor-body">
           <aside className="office-editor-palette">
             <button className="office-editor-add-room" onClick={addRoom} type="button"><Plus /> Nova sala</button>
+            <button className="office-editor-add-zone" onClick={addZone} type="button"><MapPinned /> Nova área interativa</button>
             <div className="office-editor-items">
               {ITEM_KEYS.map((key) => {
                 const visual = furnitureVisual(key);
@@ -170,6 +215,22 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
                   onResize={(dw, dh) => updateRoom(room.id, {
                     w: clamp(room.w + dw, 4, layout.mapCols - room.x),
                     h: clamp(room.h + dh, 4, layout.mapRows - room.y),
+                  })}
+                />
+              ))}
+              {layout.zones.map((zone) => (
+                <ZoneBox
+                  key={zone.id}
+                  zone={zone}
+                  selected={selected?.kind === "zone" && selected.id === zone.id}
+                  onSelect={() => setSelected({ kind: "zone", id: zone.id })}
+                  onMove={(dx, dy) => updateZone(zone.id, {
+                    x: clamp(zone.x + dx, 0, layout.mapCols - zone.w),
+                    y: clamp(zone.y + dy, 0, layout.mapRows - zone.h),
+                  })}
+                  onResize={(dw, dh) => updateZone(zone.id, {
+                    w: clamp(zone.w + dw, 1, layout.mapCols - zone.x),
+                    h: clamp(zone.h + dh, 1, layout.mapRows - zone.y),
                   })}
                 />
               ))}
@@ -251,10 +312,43 @@ export function OfficeEditor({ initialLayout, workspaceId, spaceId, onClose, onS
                 <button className="office-editor-delete" onClick={deleteSelected} type="button"><Trash2 /> Excluir item</button>
               </div>
             )}
-            {!selectedRoom && !selectedFurniture && (
+            {selectedZone && (() => {
+              const link = selectedZone.effects.find((effect): effect is Extract<InteractionZoneEffect, { type: "OPEN_LINK" }> => effect.type === "OPEN_LINK");
+              return (
+                <div className="office-editor-inspector-panel">
+                  <h3>Área interativa</h3>
+                  <label>Nome<input value={selectedZone.name} onChange={(event) => updateZone(selectedZone.id, { name: event.target.value })} /></label>
+                  <div className="office-editor-zone-effects">
+                    <span>Comportamentos</span>
+                    <button type="button" className={selectedZone.effects.some((effect) => effect.type === "CONVERSATION") ? "selected" : ""}
+                      onClick={() => setZoneEffect("CONVERSATION", !selectedZone.effects.some((effect) => effect.type === "CONVERSATION"))}>
+                      <Focus /> Conversa da área
+                    </button>
+                    <small>Quem estiver dentro compartilha a mesma conversa, mesmo longe.</small>
+                    <button type="button" className={selectedZone.effects.some((effect) => effect.type === "SILENT") ? "selected" : ""}
+                      onClick={() => setZoneEffect("SILENT", !selectedZone.effects.some((effect) => effect.type === "SILENT"))}>
+                      <VolumeX /> Área silenciosa
+                    </button>
+                    <small>Interrompe voz e câmera por proximidade dentro da área.</small>
+                    <button type="button" className={link ? "selected" : ""} onClick={() => setZoneEffect("OPEN_LINK", !link)}>
+                      <Link2 /> Ação contextual
+                    </button>
+                    <small>Mostra um link seguro quando alguém entra na área.</small>
+                  </div>
+                  {link && (
+                    <>
+                      <label>Texto do botão<input value={link.label ?? ""} onChange={(event) => updateLinkEffect({ label: event.target.value })} /></label>
+                      <label>Link (http ou https)<input type="url" value={link.url} onChange={(event) => updateLinkEffect({ url: event.target.value })} placeholder="https://..." /></label>
+                    </>
+                  )}
+                  <button className="office-editor-delete" onClick={deleteSelected} type="button"><Trash2 /> Excluir área</button>
+                </div>
+              );
+            })()}
+            {!selectedRoom && !selectedFurniture && !selectedZone && (
               <div className="office-editor-inspector-empty">
-                <p>Clique em uma sala ou item no mapa para editar.</p>
-                <p>Arraste para mover. Puxe o cantinho de uma sala pra redimensionar.</p>
+                <p>Clique em uma sala, área ou item no mapa para editar.</p>
+                <p>Arraste para mover. Puxe o cantinho de uma sala ou área para redimensionar.</p>
               </div>
             )}
           </aside>
@@ -285,6 +379,29 @@ function RoomBox({ room, selected, onSelect, onMove, onResize }: {
         className="office-editor-resize-handle"
         onPointerDown={(event) => { event.stopPropagation(); dragHandle(event); }}
       />
+    </div>
+  );
+}
+
+function ZoneBox({ zone, selected, onSelect, onMove, onResize }: {
+  zone: InteractionZone;
+  selected: boolean;
+  onSelect: () => void;
+  onMove: (dx: number, dy: number) => void;
+  onResize: (dw: number, dh: number) => void;
+}) {
+  const dragBody = usePointerDrag(onMove);
+  const dragHandle = usePointerDrag(onResize);
+  const tone = zone.effects.some((effect) => effect.type === "SILENT")
+    ? "silent" : zone.effects.some((effect) => effect.type === "CONVERSATION") ? "conversation" : "action";
+  return (
+    <div
+      className={`office-editor-zone ${tone} ${selected ? "selected" : ""}`}
+      style={{ left: zone.x * PX, top: zone.y * PX, width: zone.w * PX, height: zone.h * PX }}
+      onPointerDown={(event) => { onSelect(); dragBody(event); }}
+    >
+      <span className="office-editor-zone-name"><MapPinned /> {zone.name}</span>
+      <div className="office-editor-resize-handle" onPointerDown={(event) => { event.stopPropagation(); dragHandle(event); }} />
     </div>
   );
 }

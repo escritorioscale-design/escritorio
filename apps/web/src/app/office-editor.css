@@ -14,8 +14,9 @@
 
 .office-editor-body { min-height: 0; flex: 1; display: grid; grid-template-columns: 190px minmax(0,1fr) 230px; }
 .office-editor-palette { min-height: 0; display: flex; flex-direction: column; padding: 14px; border-right: 1px solid var(--line); overflow-y: auto; background: #fafaf7; }
-.office-editor-add-room { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin-bottom: 12px; border: 0; border-radius: 9px; background: #7257e8; color: white; font-size: 10px; font-weight: 800; cursor: pointer; flex: 0 0 auto; }
-.office-editor-add-room svg { width: 13px; }
+.office-editor-add-room,.office-editor-add-zone { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin-bottom: 8px; border: 0; border-radius: 9px; background: #7257e8; color: white; font-size: 10px; font-weight: 800; cursor: pointer; flex: 0 0 auto; }
+.office-editor-add-zone { margin-bottom: 12px; border: 1px solid #cfc6f6; background: #f0edff; color: #5941c6; }
+.office-editor-add-room svg,.office-editor-add-zone svg { width: 13px; }
 .office-editor-items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .office-editor-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid #e4e4dd; border-radius: 9px; background: white; cursor: pointer; }
 .office-editor-item:hover { border-color: #bdb1ef; }
@@ -25,7 +26,7 @@
 .office-editor-canvas-scroll { min-width: 0; overflow: auto; background: #e8e0cf; }
 .office-editor-canvas { position: relative; background-image: linear-gradient(rgba(0,0,0,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.06) 1px,transparent 1px); background-size: 22px 22px; }
 
-.office-editor-room { position: absolute; box-sizing: border-box; border: 2px solid #6b5f47; border-radius: 4px; background: rgba(255,255,255,.35); cursor: grab; touch-action: none; }
+.office-editor-room { position: absolute; z-index: 1; box-sizing: border-box; border: 2px solid #6b5f47; border-radius: 4px; background: rgba(255,255,255,.35); cursor: grab; touch-action: none; }
 .office-editor-room.selected { border-color: #7257e8; box-shadow: 0 0 0 3px rgba(114,87,232,.25); }
 .office-editor-room.locked { border-color: #d45757; }
 .office-editor-room-name { position: absolute; left: 4px; top: 3px; display: flex; align-items: center; gap: 3px; padding: 2px 5px; border-radius: 4px; background: rgba(255,255,255,.85); color: #40403a; font-size: 8px; font-weight: 800; white-space: nowrap; pointer-events: none; }
@@ -36,7 +37,15 @@
 .office-editor-resize-handle { position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px; border: 2px solid white; border-radius: 3px; background: #6b5f47; cursor: nwse-resize; touch-action: none; }
 .office-editor-room.selected .office-editor-resize-handle { background: #7257e8; }
 
-.office-editor-furniture { position: absolute; transform: translate(-50%,-50%); cursor: grab; touch-action: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.25); }
+.office-editor-zone { position: absolute; z-index: 2; box-sizing: border-box; border: 2px dashed #7257e8; border-radius: 10px; background: rgba(114,87,232,.13); cursor: grab; touch-action: none; }
+.office-editor-zone.silent { border-color: #b87921; background: rgba(236,173,66,.14); }
+.office-editor-zone.action { border-color: #248b7b; background: rgba(60,177,158,.13); }
+.office-editor-zone.selected { border-style: solid; box-shadow: 0 0 0 3px rgba(114,87,232,.25); }
+.office-editor-zone-name { position: absolute; left: 5px; top: 5px; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 10px); padding: 3px 6px; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,.9); color: #403678; font-size: 8px; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+.office-editor-zone-name svg { width: 9px; flex: 0 0 auto; }
+.office-editor-zone .office-editor-resize-handle { background: #7257e8; }
+
+.office-editor-furniture { position: absolute; z-index: 3; transform: translate(-50%,-50%); cursor: grab; touch-action: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.25); }
 .office-editor-furniture.selected { outline: 2px solid #7257e8; outline-offset: 2px; border-radius: 3px; }
 
 .office-editor-inspector { min-height: 0; padding: 16px; border-left: 1px solid var(--line); overflow-y: auto; }
@@ -54,5 +63,11 @@
 .office-editor-facing > div { display: flex; gap: 6px; }
 .office-editor-facing button { flex: 1; height: 32px; border: 1px solid #deded7; border-radius: 7px; background: white; font-size: 13px; cursor: pointer; }
 .office-editor-facing button.selected { border-color: #7257e8; background: #f0edff; }
+.office-editor-zone-effects { display: grid; gap: 6px; }
+.office-editor-zone-effects > span { color: #66675f; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.office-editor-zone-effects button { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 9px; border: 1px solid #deded7; border-radius: 8px; background: white; color: #55564f; font-size: 10px; font-weight: 800; text-align: left; cursor: pointer; }
+.office-editor-zone-effects button svg { width: 14px; flex: 0 0 auto; }
+.office-editor-zone-effects button.selected { border-color: #7257e8; background: #f0edff; color: #5941c6; }
+.office-editor-zone-effects small { margin: -3px 2px 3px; color: #92938b; font-size: 8px; line-height: 1.35; }
 .office-editor-delete { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; border: 1px solid #f3c6c6; border-radius: 9px; background: #fff3f3; color: #ad3a3d; font-size: 10px; font-weight: 800; cursor: pointer; }
 .office-editor-delete svg { width: 13px; }

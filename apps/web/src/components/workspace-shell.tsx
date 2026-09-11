@@ -6,8 +6,8 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, Camera, CalendarDays, Check, ChevronDown, Grid2X2, Lock, LockOpen, LayoutGrid, LogOut, MessageSquare,
-  Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, X,
+  Bell, Camera, CalendarDays, Check, ChevronDown, ExternalLink, Focus, Grid2X2, Lock, LockOpen, LayoutGrid, LogOut,
+  MapPinned, MessageSquare, Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, VolumeX, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,8 +20,8 @@ import { audioRoomAt, canHear, isRoomWide, ProximityVoice, PROXIMITY_SILENT_TILE
 import { signOut } from "@/lib/auth-client";
 import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
 import {
-  getConversationTables, isInsideTable, resolveOfficeLayout, tableForSeat, tableRect,
-  TABLE_REVEAL_DISTANCE, type OfficeLayout,
+  getConversationTables, interactionZonesAt, isInsideTable, resolveOfficeLayout, safeZoneLink, tableForSeat, tableRect,
+  zoneHasEffect, TABLE_REVEAL_DISTANCE, type OfficeLayout,
 } from "@/lib/office-layout";
 import type { RestrictedZone } from "@/lib/office-simulation";
 import {
@@ -364,10 +364,24 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
 
   useEffect(() => {
     if (!nearby.length && cameraOn) setCameraOn(false);
-  }, [cameraOn, nearby.length]);
+    if (!nearby.length && micOn) setMicOn(false);
+  }, [cameraOn, micOn, nearby.length]);
   // Other people's self-locked desks are temporary solid obstacles — nobody
   // else can walk into that little bubble while it's up.
   const selfTile = useMemo(() => ({ x: position.x * layout.mapCols / 100, y: position.y * layout.mapRows / 100 }), [position, layout]);
+  const activeZones = useMemo(() => interactionZonesAt(layout, selfTile.x, selfTile.y), [layout, selfTile]);
+  const activeZoneIds = useMemo(() => new Set(activeZones.map((zone) => zone.id)), [activeZones]);
+  const inSilentZone = activeZones.some((zone) => zoneHasEffect(zone, "SILENT"));
+  const inConversationZone = activeZones.some((zone) => zoneHasEffect(zone, "CONVERSATION"));
+  const activeLink = useMemo(() => {
+    for (const zone of activeZones) {
+      for (const effect of zone.effects) {
+        const href = safeZoneLink(effect);
+        if (href) return { zone, effect, href };
+      }
+    }
+    return null;
+  }, [activeZones]);
   const tableBySeat = useMemo(() => new Map(conversationTables.flatMap((table) => table.seatIds.map((id) => [id, table] as const))), [conversationTables]);
   const selfTable = seatId ? tableBySeat.get(seatId) : undefined;
   const tableZones = useMemo<TableZoneView[]>(() => conversationTables.flatMap((table) => {
@@ -582,6 +596,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
               occupiedSeatIds={occupiedSeatIds}
               lockedZones={lockedZones}
               tableZones={tableZones}
+              activeZoneIds={activeZoneIds}
               moveCommand={moveCommand}
               onUpdate={handleLocalUpdate}
               active={!editorOpen && !officeEditorOpen && !layoutEditorOpen}
@@ -634,6 +649,21 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
                 <label>Você</label>
               </div>
             </OfficeBuilder>
+            {activeZones.length > 0 && (
+              <section className="zone-context-card" aria-live="polite">
+                <span><MapPinned /> AGORA EM</span>
+                <strong>{activeZones.map((zone) => zone.name).join(" · ")}</strong>
+                <div>
+                  {inConversationZone && <small><Focus /> Conversa da área</small>}
+                  {inSilentZone && <small><VolumeX /> Silenciosa</small>}
+                </div>
+                {activeLink && (
+                  <a href={activeLink.href} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink /> {activeLink.effect.type === "OPEN_LINK" ? activeLink.effect.label || "Abrir recurso" : "Abrir recurso"}
+                  </a>
+                )}
+              </section>
+            )}
             <div className="proximity-controls">
               <button
                 type="button"
@@ -712,7 +742,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
           <aside className="people-panel">
             <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
             <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Auditório · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
-            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>{layout.rooms.length} salas · totalmente personalizável</strong><p>Sala geral, criação e gerência ficam no corredor superior; os squads embaixo.</p></section>
+            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>{layout.rooms.length} salas · {layout.zones.length} áreas interativas</strong><p>Áreas podem criar conversas próprias, silêncio ou abrir recursos contextuais.</p></section>
             {mediaError && <p className="media-error">{mediaError}</p>}
             {ambientError && <p className="media-error">{ambientError}</p>}
             <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>

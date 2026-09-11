@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_OFFICE_LAYOUT as layout, getAllSeats, tableForSeat } from '../src/lib/office-layout.ts';
+import {
+  DEFAULT_OFFICE_LAYOUT as layout, getAllSeats, interactionZonesAt, resolveOfficeLayout,
+  safeZoneLink, tableForSeat,
+} from '../src/lib/office-layout.ts';
 import { audioRoomAt, canHear, isRoomWide, volumeFor, PROXIMITY_SILENT_TILES } from '../src/lib/office-audio.ts';
 
 // Presence speaks in percentages; the rules think in tiles. Everything below
@@ -114,4 +117,32 @@ test('the director office is room-wide, squad and creative rooms are not', () =>
     const r = room(id);
     if (r) assert.ok(!isRoomWide(r), `${id} holds desks, so it must use the radius`);
   }
+});
+
+test('legacy layouts are upgraded with an empty interaction-zone collection', () => {
+  const legacy = structuredClone(layout);
+  delete legacy.zones;
+  const resolved = resolveOfficeLayout(legacy);
+  assert.deepEqual(resolved.zones, []);
+  assert.equal(resolved.version, 3);
+});
+
+test('conversation areas isolate and carry voice across their full geometry', () => {
+  const withZone = structuredClone(layout);
+  withZone.zones = [{
+    id: 'lounge', name: 'Lounge', x: 10, y: 20, w: 20, h: 3,
+    effects: [{ type: 'CONVERSATION' }],
+  }];
+  const west = at(11, 21.5), east = at(29, 21.5), outside = at(31, 21.5);
+  assert.equal(interactionZonesAt(withZone, 11, 21.5)[0].id, 'lounge');
+  assert.equal(volumeFor(withZone, west, east, free, free), 1, 'same area is one voice bubble');
+  assert.equal(volumeFor(withZone, west, outside, free, free), 0, 'the area does not leak outward');
+});
+
+test('silent areas cut proximity media and contextual links accept only http(s)', () => {
+  const withZone = structuredClone(layout);
+  withZone.zones = [{ id: 'quiet', name: 'Quiet', x: 10, y: 20, w: 5, h: 3, effects: [{ type: 'SILENT' }] }];
+  assert.equal(volumeFor(withZone, at(11, 21.5), at(12, 21.5), free, free), 0);
+  assert.equal(safeZoneLink({ type: 'OPEN_LINK', url: 'javascript:alert(1)' }), null);
+  assert.match(safeZoneLink({ type: 'OPEN_LINK', url: 'https://example.com/guide' }), /^https:\/\/example\.com/);
 });

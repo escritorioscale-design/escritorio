@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_OFFICE_LAYOUT, TILE, doorRect, getWalls, type OfficeLayout, type Rect } from "@/lib/office-layout";
+import {
+  DEFAULT_OFFICE_LAYOUT, TILE, doorRect, getWalls, zoneHasEffect,
+  type OfficeLayout, type Rect,
+} from "@/lib/office-layout";
 import { OfficeSimulation, type MovementState, type RestrictedZone, type WorldInput } from "@/lib/office-simulation";
 import { OfficeFurniture } from "@/components/office-furniture";
 import "./office-scene.css";
@@ -17,11 +20,12 @@ export type MoveCommand = { id: string; x: number; y: number };
 const KEY_MAP: Record<string, string> = { w: "up", arrowup: "up", s: "down", arrowdown: "down", a: "left", arrowleft: "left", d: "right", arrowright: "right" };
 const EMPTY_SEATS = new Set<string>();
 
-export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds = EMPTY_SEATS, lockedZones = [], tableZones = [], peers = [], moveCommand, onUpdate, theme = "day", active = true, children, showStatus = false, live }: {
+export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds = EMPTY_SEATS, lockedZones = [], tableZones = [], activeZoneIds = EMPTY_SEATS, peers = [], moveCommand, onUpdate, theme = "day", active = true, children, showStatus = false, live }: {
   layout?: OfficeLayout;
   occupiedSeatIds?: ReadonlySet<string>;
   lockedZones?: RestrictedZone[];
   tableZones?: TableZoneView[];
+  activeZoneIds?: ReadonlySet<string>;
   peers?: { x: number; y: number }[];
   moveCommand?: MoveCommand | null;
   onUpdate: (state: LocalMoveState) => void;
@@ -155,6 +159,15 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
       <div ref={worldRef} className="css-office-world office-real-world" style={{ width: worldW, height: worldH }} onDoubleClick={walk}>
         {layout.rooms.map((room) => <div key={`floor-${room.id}`} className={`office-real-floor floor-${room.kind.toLowerCase()} ${room.parentId ? "is-inner" : ""}`}
           style={{ left: room.x * TILE, top: room.y * TILE, width: room.w * TILE, height: room.h * TILE }} />)}
+        {(layout.zones ?? []).map((zone) => {
+          const tone = zoneHasEffect(zone, "SILENT") ? "silent" : zoneHasEffect(zone, "CONVERSATION") ? "conversation" : "action";
+          return <div
+            key={`zone-${zone.id}`}
+            className={`world-interaction-zone ${tone} ${activeZoneIds.has(zone.id) ? "active" : ""}`}
+            style={{ left: zone.x * TILE, top: zone.y * TILE, width: zone.w * TILE, height: zone.h * TILE }}
+            aria-label={zone.name}
+          ><span>{zone.name}</span></div>;
+        })}
         {layout.furniture.map((piece) => <OfficeFurniture key={piece.id} piece={piece} rows={layout.mapRows} />)}
         {wallSegments.map((rect, index) => <div key={index} className={`office-real-wall ${rect.w > rect.h ? "horizontal" : "vertical"}`}
           style={{ left: rect.x * TILE, top: rect.y * TILE, width: rect.w * TILE, height: rect.h * TILE, zIndex: Math.round(20 + rect.y / layout.mapRows * 100) }} />)}

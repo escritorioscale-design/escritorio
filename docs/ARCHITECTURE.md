@@ -39,3 +39,28 @@ Browser
   audit logs.
 - Redis owns online presence and live positions. PostgreSQL stores only durable
   snapshots and configuration.
+
+## Data-driven map areas
+
+`Space.mapData` stores rooms, furniture and rectangular interaction zones. A
+zone owns geometry plus one or more composable effects instead of requiring a
+new hardcoded room type for each behaviour:
+
+- `CONVERSATION` turns the area into one isolated voice bubble.
+- `SILENT` disconnects proximity media while a participant is inside.
+- `OPEN_LINK` exposes a contextual, http(s)-only action in the map UI.
+
+The browser evaluates these effects from the same layout used by rendering and
+audio subscriptions. Layout JSON from before zones existed is normalized with
+an empty `zones` collection, so the change needs no PostgreSQL migration.
+
+These effects are experience rules, not authorization boundaries. Future
+restricted areas or capacity limits must be enforced by the realtime gateway
+using server-owned map data; client collision alone is not security.
+
+## Deployment fit
+
+The area model adds no service to the production topology. Next.js remains on
+Vercel, durable layout JSON remains in Neon/PostgreSQL, Socket.IO remains on the
+WebSocket-capable realtime host, Redis remains the ephemeral coordination
+layer, and media can continue on LiveKit or Cloudflare Realtime.

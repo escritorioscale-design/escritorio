@@ -3,7 +3,10 @@
 // (commit 29454ae dropped the room awareness that b7c851b had added), which
 // is exactly why it does not live inside the component any more.
 
-import { isInsideTable, roomAt, tableForSeat, type OfficeLayout, type RoomKind } from "./office-layout.ts";
+import {
+  interactionZonesAt, isInsideTable, roomAt, tableForSeat, zoneHasEffect,
+  type OfficeLayout, type RoomKind,
+} from "./office-layout.ts";
 
 /** Inside this many tiles, remote voices play at full volume. */
 export const PROXIMITY_FULL_VOLUME_TILES = 2;
@@ -48,7 +51,9 @@ function volumeForDistance(distance: number) {
  *    hear each other, however close they stand across the wall.
  * 2. A seated person's voice belongs to that table. Everyone inside the same
  *    table area hears it; people outside and people at another table do not.
- * 3. Inside a room-wide room, people not attached to a table hear everyone.
+ * 3. A silent area cuts media; a conversation area is an isolated, room-wide
+ *    bubble for everyone inside that same area.
+ * 4. Inside a room-wide room, people not attached to a table hear everyone.
  *    Anywhere else the smaller personal-distance falloff is used.
  */
 export function volumeFor(
@@ -60,12 +65,21 @@ export function volumeFor(
   const selfRoom = roomAt(layout, self.x, self.y);
   const peerRoom = roomAt(layout, peer.x, peer.y);
   if (selfRoom?.id !== peerRoom?.id) return 0;
+  const selfZones = interactionZonesAt(layout, self.x, self.y);
+  const peerZones = interactionZonesAt(layout, peer.x, peer.y);
+  if (selfZones.some((zone) => zoneHasEffect(zone, "SILENT"))
+    || peerZones.some((zone) => zoneHasEffect(zone, "SILENT"))) return 0;
   const selfTable = selfSeat.sitting ? tableForSeat(layout, selfSeat.seatId) : undefined;
   const peerTable = peerSeat.sitting ? tableForSeat(layout, peerSeat.seatId) : undefined;
   if (selfTable || peerTable) {
     if (selfTable && peerTable && selfTable.id !== peerTable.id) return 0;
     const table = selfTable ?? peerTable!;
     return isInsideTable(table, self) && isInsideTable(table, peer) ? 1 : 0;
+  }
+  const selfConversationIds = new Set(selfZones.filter((zone) => zoneHasEffect(zone, "CONVERSATION")).map((zone) => zone.id));
+  const peerConversationIds = new Set(peerZones.filter((zone) => zoneHasEffect(zone, "CONVERSATION")).map((zone) => zone.id));
+  if (selfConversationIds.size || peerConversationIds.size) {
+    return [...selfConversationIds].some((id) => peerConversationIds.has(id)) ? 1 : 0;
   }
   if (isRoomWide(selfRoom)) return 1;
   const distance = Math.hypot(self.x - peer.x, self.y - peer.y);

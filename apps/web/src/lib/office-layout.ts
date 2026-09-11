@@ -58,12 +58,40 @@ export type ConversationTable = {
   seatIds: string[];
 };
 
+/**
+ * Behaviours attached to a rectangular part of the map. Keeping effects
+ * separate from the geometry lets an admin combine them (for example, a
+ * quiet library area that also exposes a handbook link) without inventing a
+ * new room type for every product feature.
+ */
+export type InteractionZoneEffect =
+  | { type: "SILENT" }
+  | { type: "CONVERSATION" }
+  | { type: "OPEN_LINK"; url: string; label?: string };
+
+export type InteractionZone = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  effects: InteractionZoneEffect[];
+};
+
 export type OfficeLayout = {
   version: number;
   mapCols: number;
   mapRows: number;
   rooms: LayoutRoom[];
   furniture: LayoutFurniture[];
+  zones: InteractionZone[];
+};
+
+export const INTERACTION_EFFECT_LABELS: Record<InteractionZoneEffect["type"], string> = {
+  SILENT: "Área silenciosa",
+  CONVERSATION: "Conversa da área",
+  OPEN_LINK: "Ação contextual",
 };
 
 // The full palette of furniture/decor available in the editor — every item
@@ -285,6 +313,29 @@ export function tableRect(table: ConversationTable): Rect {
   return { x: table.x - table.radius, y: table.y - table.radius, w: table.radius * 2, h: table.radius * 2 };
 }
 
+export function isInsideInteractionZone(zone: InteractionZone, x: number, y: number): boolean {
+  return x >= zone.x && x <= zone.x + zone.w && y >= zone.y && y <= zone.y + zone.h;
+}
+
+export function interactionZonesAt(layout: OfficeLayout, x: number, y: number): InteractionZone[] {
+  return (layout.zones ?? []).filter((zone) => isInsideInteractionZone(zone, x, y));
+}
+
+export function zoneHasEffect(zone: InteractionZone, type: InteractionZoneEffect["type"]): boolean {
+  return zone.effects.some((effect) => effect.type === type);
+}
+
+/** Only http(s) destinations can become clickable, including legacy map data. */
+export function safeZoneLink(effect: InteractionZoneEffect): string | null {
+  if (effect.type !== "OPEN_LINK") return null;
+  try {
+    const url = new URL(effect.url);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Doors currently visually open — proximity-based, and never true for a
  * locked room regardless of how close someone stands. */
 export function openDoorsForPosition(layout: OfficeLayout, x: number, y: number): Set<string> {
@@ -356,7 +407,7 @@ function buildDefaultLayout(): OfficeLayout {
   add("general-water", "watercooler", 58, 38.5);
   add("hall-plant-left", "plant-tree", 3.5, 21.5);
   add("hall-plant-right", "plant-tree", 74.5, 21.5);
-  return { version: 2, mapCols: 78, mapRows: 43, rooms, furniture };
+  return { version: 3, mapCols: 78, mapRows: 43, rooms, furniture, zones: [] };
 }
 
 export const DEFAULT_OFFICE_LAYOUT = buildDefaultLayout();
@@ -365,6 +416,7 @@ export function isOfficeLayout(value: unknown): value is OfficeLayout {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<OfficeLayout>;
   return Array.isArray(candidate.rooms) && Array.isArray(candidate.furniture)
+    && (candidate.zones === undefined || Array.isArray(candidate.zones))
     && typeof candidate.mapCols === "number" && typeof candidate.mapRows === "number";
 }
 
@@ -377,5 +429,8 @@ export function resolveOfficeLayout(layout?: OfficeLayout): OfficeLayout {
   let fingerprint = 2166136261;
   for (const character of value) fingerprint = Math.imul(fingerprint ^ character.charCodeAt(0), 16777619);
   const oldSeed = layout.version === 1 && (fingerprint >>> 0).toString(16) === "b4adb066";
-  return oldSeed ? DEFAULT_OFFICE_LAYOUT : layout;
+  if (oldSeed) return DEFAULT_OFFICE_LAYOUT;
+  // Layouts already stored before zones existed remain valid and gain an
+  // empty collection without a database migration (mapData is JSON).
+  return { ...layout, version: Math.max(layout.version, 3), zones: Array.isArray(layout.zones) ? layout.zones : [] };
 }

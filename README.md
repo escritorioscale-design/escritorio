@@ -3,6 +3,9 @@
 Escritório virtual multiusuário com presença em tempo real, chamadas por
 proximidade, reuniões e compartilhamento de tela.
 
+O editor também permite criar áreas interativas orientadas a dados: conversas
+isoladas, zonas silenciosas e links contextuais, combináveis no mesmo espaço.
+
 ## Stack
 
 - Next.js 16, React 19 e TypeScript
