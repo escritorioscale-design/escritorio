@@ -6,8 +6,8 @@ import {
   VideoConference,
 } from "@livekit/components-react";
 import {
-  Bell, Camera, CalendarDays, Check, ChevronDown, ExternalLink, Focus, Grid2X2, Lock, LockOpen, LayoutGrid, LogOut,
-  MapPinned, MessageSquare, Mic, Palette, Plus, Search, Settings, Users, Video, Volume2, VolumeX, X,
+  Bell, Camera, CalendarDays, ChevronDown, ExternalLink, Focus, Grid2X2, Lock, LockOpen, LayoutGrid, LogOut,
+  MapPinned, MessageSquare, Mic, Plus, Search, Settings, Users, Video, Volume2, VolumeX, X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,27 +17,14 @@ import { InviteModal } from "@/components/invite-modal";
 import { OfficeBuilder, type LocalMoveState, type MoveCommand, type TableZoneView } from "@/components/office-builder";
 import { OfficeEditor } from "@/components/office-editor";
 import { audioRoomAt, canHear, isRoomWide, ProximityVoice, PROXIMITY_SILENT_TILES } from "@/components/proximity-voice";
+import { WokaStudio } from "@/components/woka-studio";
 import { signOut } from "@/lib/auth-client";
-import { LIMEZU_LABELS, LIMEZU_SKINS } from "@/lib/limezu-sprites";
 import {
   getConversationTables, interactionZonesAt, isInsideTable, resolveOfficeLayout, safeZoneLink, tableForSeat, tableRect,
   zoneHasEffect, TABLE_REVEAL_DISTANCE, type OfficeLayout,
 } from "@/lib/office-layout";
 import type { RestrictedZone } from "@/lib/office-simulation";
-import {
-  AVATAR_ACCESSORIES,
-  AVATAR_BODY_TYPES,
-  AVATAR_BOTTOM_COLORS,
-  AVATAR_BOTTOM_STYLES,
-  AVATAR_HAIR_COLORS,
-  AVATAR_HAIR_STYLES,
-  AVATAR_SHOE_COLORS,
-  AVATAR_SKIN_TONES,
-  AVATAR_TOP_COLORS,
-  AVATAR_TOP_STYLES,
-  normalizeAvatar,
-  type AvatarAppearance,
-} from "@/lib/avatar";
+import { normalizeAvatar, type AvatarAppearance } from "@/lib/avatar";
 
 type RoomData = { id: string; name: string; kind: string; x: number; y: number; width: number; height: number; capacity?: number | null };
 type Presence = {
@@ -69,49 +56,7 @@ type Props = {
 };
 
 type OfficeTheme = "day" | "neon" | "studio";
-
-const bodyTypeLabels: Record<AvatarAppearance["bodyType"], string> = {
-  male: "Masculino", female: "Feminino",
-};
-const hairLabels: Record<(typeof AVATAR_HAIR_STYLES)[number], string> = {
-  short: "Curto", bob: "Bob", curls: "Cachos", bun: "Preso",
-  long: "Longo", ponytail: "Meio preso", mohawk: "Moicano", afro: "Black power", spiky: "Espetado", bald: "Careca",
-  dreadlocks: "Dreads", cornrows: "Tranças", natural: "Natural", swoop: "Repicado", pixie: "Pixie", loose: "Solto",
-};
-const topStyleLabels: Record<AvatarAppearance["topStyle"], string> = {
-  tshirt: "Camiseta", hoodie: "Jaqueta", jacket: "Casaco", blazer: "Colete", tank: "Regata",
-};
-const bottomStyleLabels: Record<AvatarAppearance["bottomStyle"], string> = {
-  pants: "Calça", shorts: "Shorts", skirt: "Saia", leggings: "Legging",
-};
-const accessoryLabels: Record<(typeof AVATAR_ACCESSORIES)[number], string> = {
-  glasses: "Óculos", sunglasses: "Óculos de sol", hat: "Boné", tophat: "Cartola", bowtie: "Gravata", necklace: "Colar", earrings: "Brincos",
-};
-
-function AvatarSwatches({ values, value, onChange, label }: {
-  values: readonly string[];
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-}) {
-  return (
-    <fieldset className="avatar-fieldset">
-      <legend>{label}</legend>
-      <div className="avatar-swatches">
-        {values.map((color) => (
-          <button
-            type="button"
-            key={color}
-            className={value === color ? "selected" : ""}
-            style={{ background: color }}
-            onClick={() => onChange(color)}
-            aria-label={`${label}: ${color}`}
-          >{value === color && <Check />}</button>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
+type WorkspacePanel = "people" | "messages" | "agenda";
 
 const CONNECTION_LABEL = { online: "Tempo real conectado", connecting: "Conectando…", offline: "Modo offline" } as const;
 const USE_CLOUDFLARE_MEDIA = process.env.NEXT_PUBLIC_MEDIA_PROVIDER === "cloudflare";
@@ -151,6 +96,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
   const [avatarError, setAvatarError] = useState("");
   const [officeEditorOpen, setOfficeEditorOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
   const [officeTheme, setOfficeTheme] = useState<OfficeTheme>("day");
   const socketRef = useRef<Socket | null>(null);
   const positionRef = useRef(position);
@@ -546,18 +492,22 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
     setMedia(await response.json());
   }
 
+  function togglePanel(panel: WorkspacePanel) {
+    setActivePanel((current) => current === panel ? null : panel);
+  }
+
   return (
     <main className="office-shell">
       <aside className="nav-rail">
         <div className="logo">O</div>
         <nav>
-          <button className="active" aria-label="Escritório"><Grid2X2 /></button>
-          <button aria-label="Mensagens"><MessageSquare /><b>3</b></button>
-          <button aria-label="Agenda"><CalendarDays /></button>
-          <button aria-label="Pessoas"><Users /></button>
+          <button className={activePanel === null ? "active" : ""} aria-label="Escritório" onClick={() => setActivePanel(null)}><Grid2X2 /></button>
+          <button className={activePanel === "messages" ? "active" : ""} aria-label="Mensagens" onClick={() => togglePanel("messages")}><MessageSquare />{nearby.length > 0 && <b>{nearby.length}</b>}</button>
+          <button className={activePanel === "agenda" ? "active" : ""} aria-label="Agenda" onClick={() => togglePanel("agenda")}><CalendarDays /></button>
+          <button className={activePanel === "people" ? "active" : ""} aria-label="Pessoas" onClick={() => togglePanel("people")}><Users /></button>
         </nav>
         <div className="nav-bottom">
-          <button aria-label="Configurações"><Settings /></button>
+          <button aria-label="Personalizar escritório" onClick={() => setOfficeEditorOpen(true)}><Settings /></button>
           <button className="rail-avatar" aria-label="Editar personagem" onClick={openAvatarEditor}>
             <AvatarCharacter appearance={avatar} compact />
           </button>
@@ -567,6 +517,7 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
       <section className="office-main">
         <header className="office-header">
           <div className="workspace-heading">
+            <div className="world-brand-mark">O</div>
             <i className={connection} />
             <div><span>{organization.name} · {organization.role}</span><strong>{space.name}</strong></div>
             <ChevronDown />
@@ -575,11 +526,9 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
             <button aria-label="Buscar"><Search /></button>
             <button aria-label="Notificações"><Bell /></button>
             <div className="online-count"><span>{Object.keys(people).length + 1}</span> online</div>
-            <button className="customize office-customize" onClick={() => setOfficeEditorOpen(true)}><Settings /> Escritório</button>
             {canEditLayout && (
               <button className="customize" onClick={() => setLayoutEditorOpen(true)}><LayoutGrid /> Editar layout</button>
             )}
-            <button className="customize" onClick={openAvatarEditor}><Palette /> Personagem</button>
             {(organization.role === "owner" || organization.role === "admin") && (
               <button className="invite" onClick={() => setInviteOpen(true)}><Plus /> Convidar</button>
             )}
@@ -739,89 +688,79 @@ export function WorkspaceShell({ user, organization, workspace, space, rooms, of
             )}
           </section>
 
-          <aside className="people-panel">
-            <div className="panel-title"><h2>Agora</h2><Volume2 /></div>
-            <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>Auditório · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
-            <section className="office-plan"><span>LAYOUT DO ESCRITÓRIO</span><strong>{layout.rooms.length} salas · {layout.zones.length} áreas interativas</strong><p>Áreas podem criar conversas próprias, silêncio ou abrir recursos contextuais.</p></section>
-            {mediaError && <p className="media-error">{mediaError}</p>}
-            {ambientError && <p className="media-error">{ambientError}</p>}
-            <div className="people-heading"><span>PESSOAS POR PERTO</span><b>{nearby.length}</b></div>
-            {nearby.length ? nearby.map((person) => (
-              <button className="person-row" key={person.userId} onClick={() => joinCall()}>
-                <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
-                <div><strong>{person.name}</strong><small>Você já pode ouvir</small></div><Mic />
-              </button>
-            )) : <div className="nearby-empty"><Users /><p>Aproxime-se de alguém no mapa para conversar por voz.</p></div>}
-            <div className="people-heading"><span>NO ESCRITÓRIO</span><b>{Object.keys(people).length + 1}</b></div>
-            <div className="person-row me-row">
-              <span className="person-avatar"><AvatarCharacter appearance={avatar} compact /></span>
-              <div><strong>{user.name}</strong><small>Você · {connection}</small></div>
-            </div>
-            {Object.values(people).slice(0, 8).map((person) => (
-              <div className="person-row" key={person.userId}>
-                <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
-                <div><strong>{person.name}</strong><small>{person.status}</small></div>
+          {activePanel === "people" && (
+            <aside className="people-panel world-side-panel">
+              <div className="panel-title"><div><span>PRESENÇA</span><h2>Pessoas no espaço</h2></div><button onClick={() => setActivePanel(null)} aria-label="Fechar painel"><X /></button></div>
+              <section className="meeting-card"><span>REUNIÃO ABERTA</span><h3>Daily de produto</h3><p>All Hands · até 24 pessoas</p><button onClick={() => joinCall()}><Video /> Entrar na reunião</button></section>
+              <section className="office-plan"><span>SCALE CAMPUS</span><strong>{layout.rooms.length} salas · {layout.zones.length} áreas inteligentes</strong><p>Voz por proximidade, mesas privadas, áreas silenciosas e espaços sociais.</p></section>
+              {mediaError && <p className="media-error">{mediaError}</p>}
+              {ambientError && <p className="media-error">{ambientError}</p>}
+              <div className="people-heading"><span>POR PERTO</span><b>{nearby.length}</b></div>
+              {nearby.length ? nearby.map((person) => (
+                <button className="person-row" key={person.userId} onClick={() => joinCall()}>
+                  <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
+                  <div><strong>{person.name}</strong><small>Você já pode ouvir</small></div><Mic />
+                </button>
+              )) : <div className="nearby-empty"><Users /><p>Aproxime-se de alguém no mapa para conversar por voz.</p></div>}
+              <div className="people-heading"><span>NO ESCRITÓRIO</span><b>{Object.keys(people).length + 1}</b></div>
+              <div className="person-row me-row">
+                <span className="person-avatar"><AvatarCharacter appearance={avatar} compact /></span>
+                <div><strong>{user.name}</strong><small>Você · {connection}</small></div>
               </div>
-            ))}
-          </aside>
+              {Object.values(people).slice(0, 12).map((person) => (
+                <div className="person-row" key={person.userId}>
+                  <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
+                  <div><strong>{person.name}</strong><small>{person.status}</small></div>
+                </div>
+              ))}
+            </aside>
+          )}
+
+          {activePanel === "messages" && (
+            <aside className="people-panel world-side-panel">
+              <div className="panel-title"><div><span>CONVERSAS</span><h2>Chat por proximidade</h2></div><button onClick={() => setActivePanel(null)} aria-label="Fechar painel"><X /></button></div>
+              <div className="world-panel-intro"><MessageSquare /><div><strong>Converse no contexto</strong><p>Entre numa área social ou chegue perto de alguém para iniciar uma conversa.</p></div></div>
+              <div className="people-heading"><span>CONVERSAS DISPONÍVEIS</span><b>{nearby.length}</b></div>
+              {nearby.length ? nearby.map((person) => (
+                <div className="person-row" key={person.userId}>
+                  <span className="person-avatar"><AvatarCharacter appearance={normalizeAvatar(person.avatar)} compact /></span>
+                  <div><strong>{person.name}</strong><small>Ao seu alcance agora</small></div><Volume2 />
+                </div>
+              )) : <div className="nearby-empty"><MessageSquare /><p>Nenhuma conversa próxima. Explore a praça ou o café.</p></div>}
+              <div className="people-heading"><span>ÁREAS SOCIAIS</span><b>{layout.zones.filter((zone) => zoneHasEffect(zone, "CONVERSATION")).length}</b></div>
+              {layout.zones.filter((zone) => zoneHasEffect(zone, "CONVERSATION")).map((zone) => <div className="world-place-row" key={zone.id}><i /><div><strong>{zone.name}</strong><small>Conversa compartilhada na área</small></div></div>)}
+            </aside>
+          )}
+
+          {activePanel === "agenda" && (
+            <aside className="people-panel world-side-panel">
+              <div className="panel-title"><div><span>AGENDA</span><h2>Hoje no escritório</h2></div><button onClick={() => setActivePanel(null)} aria-label="Fechar painel"><X /></button></div>
+              <section className="meeting-card agenda-now"><span>AGORA · 15 MIN</span><h3>Daily de produto</h3><p>All Hands · aberta para a equipe</p><button onClick={() => joinCall()}><Video /> Entrar agora</button></section>
+              <div className="people-heading"><span>PRÓXIMOS ESPAÇOS</span><b>{layout.rooms.filter((room) => room.kind === "MEETING" || room.kind === "AUDITORIUM").length}</b></div>
+              {layout.rooms.filter((room) => room.kind === "MEETING" || room.kind === "AUDITORIUM").slice(0, 7).map((room, index) => (
+                <div className="world-agenda-row" key={room.id}><time>{String(10 + index).padStart(2, "0")}:00</time><div><strong>{room.name}</strong><small>{room.kind === "AUDITORIUM" ? "Evento geral" : "Sala disponível"}</small></div><i /></div>
+              ))}
+            </aside>
+          )}
         </div>
       </section>
 
       {editorOpen && (
         <div className="avatar-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditorOpen(false); }}>
-          <section className="avatar-editor" role="dialog" aria-modal="true" aria-labelledby="avatar-editor-title">
-            <header><div><span>SEU PERSONAGEM</span><h2 id="avatar-editor-title">Crie seu visual</h2><p>As mudanças aparecem para todo mundo no escritório.</p></div><button onClick={() => setEditorOpen(false)} aria-label="Fechar"><X /></button></header>
-            <div className="avatar-editor-content">
-              <div className="avatar-preview-stage">
-                <div className="avatar-preview-glow" />
-                <AvatarCharacter appearance={draftAvatar} direction="down" moving />
-                <strong>{user.name}</strong><span>Prévia em tempo real</span>
-              </div>
-              <div className="avatar-controls">
-                <fieldset className="avatar-fieldset avatar-photo-fieldset">
-                  <legend>Foto de perfil</legend>
-                  <p className="avatar-photo-hint">Aparece na videochamada por proximidade quando sua câmera está desligada.</p>
-                  <div className="avatar-photo-row">
-                    <span className="avatar-photo-preview">
-                      {photo ? <img src={photo} alt="" /> : <span className="avatar-photo-placeholder">{user.name.slice(0, 1).toUpperCase()}</span>}
-                    </span>
-                    <label className="avatar-photo-upload">
-                      {photoUploading ? "Enviando…" : "Escolher foto"}
-                      <input
-                        type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={photoUploading}
-                        onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadPhoto(file); event.target.value = ""; }}
-                      />
-                    </label>
-                    {photo && <button type="button" className="avatar-photo-remove" onClick={removePhoto} disabled={photoUploading}>Remover</button>}
-                  </div>
-                  {photoError && <p className="avatar-save-error">{photoError}</p>}
-                </fieldset>
-                <fieldset className="avatar-fieldset">
-                  <legend>Visual</legend>
-                  <div className="avatar-choice-grid">
-                    <button type="button" className={draftAvatar.skin === "custom" ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, skin: "custom" }))}>Personalizado</button>
-                    {LIMEZU_SKINS.map((skin) => (
-                      <button type="button" key={skin} className={draftAvatar.skin === skin ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, skin }))}>{LIMEZU_LABELS[skin]}</button>
-                    ))}
-                  </div>
-                </fieldset>
-                {draftAvatar.skin === "custom" && <>
-                  <fieldset className="avatar-fieldset"><legend>Corpo</legend><div className="avatar-choice-grid">{AVATAR_BODY_TYPES.map((bodyType) => <button type="button" key={bodyType} className={draftAvatar.bodyType === bodyType ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bodyType }))}>{bodyTypeLabels[bodyType]}</button>)}</div></fieldset>
-                  <AvatarSwatches label="Tom de pele" values={AVATAR_SKIN_TONES} value={draftAvatar.skinTone} onChange={(skinTone) => setDraftAvatar((current) => ({ ...current, skinTone: skinTone as AvatarAppearance["skinTone"] }))} />
-                  <fieldset className="avatar-fieldset"><legend>Cabelo</legend><div className="avatar-choice-grid">{AVATAR_HAIR_STYLES.map((hairStyle) => <button type="button" key={hairStyle} className={draftAvatar.hairStyle === hairStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, hairStyle }))}>{hairLabels[hairStyle]}</button>)}</div></fieldset>
-                  <AvatarSwatches label="Cor do cabelo" values={AVATAR_HAIR_COLORS} value={draftAvatar.hairColor} onChange={(hairColor) => setDraftAvatar((current) => ({ ...current, hairColor: hairColor as AvatarAppearance["hairColor"] }))} />
-                  <fieldset className="avatar-fieldset"><legend>Estilo da blusa</legend><div className="avatar-choice-grid">{AVATAR_TOP_STYLES.map((topStyle) => <button type="button" key={topStyle} className={draftAvatar.topStyle === topStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, topStyle }))}>{topStyleLabels[topStyle]}</button>)}</div></fieldset>
-                  <AvatarSwatches label="Cor da blusa" values={AVATAR_TOP_COLORS} value={draftAvatar.topColor} onChange={(topColor) => setDraftAvatar((current) => ({ ...current, topColor: topColor as AvatarAppearance["topColor"] }))} />
-                  <fieldset className="avatar-fieldset"><legend>Estilo da calça</legend><div className="avatar-choice-grid">{AVATAR_BOTTOM_STYLES.map((bottomStyle) => <button type="button" key={bottomStyle} className={draftAvatar.bottomStyle === bottomStyle ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, bottomStyle }))}>{bottomStyleLabels[bottomStyle]}</button>)}</div></fieldset>
-                  <AvatarSwatches label="Cor da calça" values={AVATAR_BOTTOM_COLORS} value={draftAvatar.bottomColor} onChange={(bottomColor) => setDraftAvatar((current) => ({ ...current, bottomColor: bottomColor as AvatarAppearance["bottomColor"] }))} />
-                  <AvatarSwatches label="Sapatos" values={AVATAR_SHOE_COLORS} value={draftAvatar.shoeColor} onChange={(shoeColor) => setDraftAvatar((current) => ({ ...current, shoeColor: shoeColor as AvatarAppearance["shoeColor"] }))} />
-                  <fieldset className="avatar-fieldset"><legend>Acessórios</legend><div className="avatar-choice-grid">{AVATAR_ACCESSORIES.map((accessory) => <button type="button" key={accessory} className={draftAvatar.accessories.includes(accessory) ? "selected" : ""} onClick={() => setDraftAvatar((current) => ({ ...current, accessories: current.accessories.includes(accessory) ? current.accessories.filter((item) => item !== accessory) : [...current.accessories, accessory] }))}>{accessoryLabels[accessory]}</button>)}</div></fieldset>
-                </>}
-              </div>
-            </div>
-            {avatarError && <p className="avatar-save-error">{avatarError}</p>}
-            <footer><button className="avatar-cancel" onClick={() => setEditorOpen(false)}>Cancelar</button><button className="avatar-save" onClick={saveAvatar} disabled={avatarSaving}>{avatarSaving ? "Salvando…" : <><Check /> Salvar personagem</>}</button></footer>
-          </section>
+          <WokaStudio
+            value={draftAvatar}
+            userName={user.name}
+            photo={photo}
+            photoUploading={photoUploading}
+            photoError={photoError}
+            saving={avatarSaving}
+            error={avatarError}
+            onChange={setDraftAvatar}
+            onUploadPhoto={uploadPhoto}
+            onRemovePhoto={removePhoto}
+            onCancel={() => setEditorOpen(false)}
+            onSave={saveAvatar}
+          />
         </div>
       )}
 

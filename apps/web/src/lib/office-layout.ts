@@ -358,56 +358,110 @@ function buildDefaultLayout(): OfficeLayout {
   const furniture: LayoutFurniture[] = [];
   const add = (id: string, key: string, x: number, y: number, extra: Partial<LayoutFurniture> = {}) =>
     furniture.push({ id, key, x, y, ...extra });
-  // Four workrooms: each contains four workstations and a private meeting room.
-  for (let index = 0; index < 4; index++) {
-    const x = index % 2 ? 29 : 2, y = index < 2 ? 2 : 24;
-    const id = `squad-${index + 1}`;
-    rooms.push({ id, name: index === 3 ? "Criação" : `Squad ${index + 1}`,
-      kind: index === 3 ? "CREATIVE" : "FOCUS", x, y, w: 24, h: 17, doorSide: index < 2 ? "bottom" : "top", locked: false });
-    const meetingY = index < 2 ? y + 2 : y + 7;
-    const meeting = { id: `${id}-meeting`, parentId: id, name: `Reunião · ${index === 3 ? "Criação" : `Squad ${index + 1}`}`,
-      kind: "MEETING" as const, x: x + 15.5, y: meetingY, w: 7, h: 8, doorSide: index < 2 ? "bottom" as const : "top" as const, locked: false };
+  const workrooms = [
+    { id: "squad-1", name: "Produto", x: 2, y: 2, bottom: false, kind: "FOCUS" as const },
+    { id: "squad-2", name: "Tecnologia", x: 25, y: 2, bottom: false, kind: "FOCUS" as const },
+    { id: "squad-3", name: "Comercial", x: 48, y: 2, bottom: false, kind: "FOCUS" as const },
+    { id: "squad-4", name: "Criação", x: 2, y: 38, bottom: true, kind: "CREATIVE" as const },
+  ];
+
+  // Each team has a complete open workspace and a private four-person room.
+  for (const workroom of workrooms) {
+    const { id, name, x, y, bottom, kind } = workroom;
+    rooms.push({ id, name, kind, x, y, w: 21, h: 18, doorSide: bottom ? "top" : "bottom", locked: false });
+    const meeting: LayoutRoom = {
+      id: `${id}-meeting`, parentId: id, name: `Sala · ${name}`, kind: "MEETING",
+      x: x + 14.2, y: y + (bottom ? 7.4 : 2), w: 5.8, h: 8.2,
+      doorSide: bottom ? "top" : "bottom", locked: false,
+    };
     rooms.push(meeting);
     for (let desk = 0; desk < 4; desk++) {
-      const dx = x + (desk % 2 ? 11 : 4.5), dy = y + (desk < 2 ? 5 : 11.5);
+      const dx = x + (desk % 2 ? 9.8 : 3.8), dy = y + (desk < 2 ? 5.2 : 12.3);
       add(`${id}-desk-${desk + 1}`, "desk-cubicle", dx, dy);
       add(`${id}-monitor-${desk + 1}`, "monitor", dx, dy - .2, { collides: null });
-      add(`${id}-chair-${desk + 1}`, "chair-navy", dx, dy + 1.9, { facing: "up" });
-      add(`${id}-papers-${desk + 1}`, "papers", dx + 1, dy + .1, { collides: null });
+      add(`${id}-chair-${desk + 1}`, desk % 2 ? "chair-orange" : "chair-navy", dx, dy + 1.9, { facing: "up" });
+      add(`${id}-papers-${desk + 1}`, "papers", dx + .9, dy + .1, { collides: null });
     }
-    const mx = meeting.x + meeting.w / 2, my = meeting.y + 4;
-    add(`${id}-meeting-table`, "table-long", mx, my, { scale: .6 });
+    const mx = meeting.x + meeting.w / 2, my = meeting.y + meeting.h / 2;
+    add(`${id}-meeting-table`, "table-long", mx, my, { scale: .48 });
     for (const [seat, sx, sy, facing] of [
-      [1, mx - 1, my - 1.65, "down"], [2, mx + 1, my - 1.65, "down"],
-      [3, mx - 1, my + 1.65, "up"], [4, mx + 1, my + 1.65, "up"],
+      [1, mx - .85, my - 1.45, "down"], [2, mx + .85, my - 1.45, "down"],
+      [3, mx - .85, my + 1.45, "up"], [4, mx + .85, my + 1.45, "up"],
     ] as const) add(`${id}-meeting-chair-${seat}`, "chair-orange", sx, sy, { facing });
-    add(`${id}-board`, "whiteboard", x + 8, y + 1.4, { collides: null });
-    add(`${id}-shelf`, "bookshelf", x + 1.4, y + 1.9);
-    add(`${id}-plant`, "plant-tree", x + 22.3, index < 2 ? y + 15 : y + 2);
-    add(`${id}-water`, "watercooler", x + 1.5, y + 15);
+    add(`${id}-board`, "whiteboard", x + 7.2, y + 1.25, { collides: null });
+    add(`${id}-shelf`, "bookshelf", x + 1.35, y + 1.7);
+    add(`${id}-plant`, "plant-tree", x + 19.4, bottom ? y + 2 : y + 16);
+    add(`${id}-water`, "watercooler", x + 1.35, y + 16);
   }
+
   rooms.push(
-    { id: "manager", kind: "DIRECTOR", name: "Gerência", x: 56, y: 2, w: 20, h: 17, doorSide: "bottom", locked: false },
-    { id: "general", kind: "MEETING", name: "Reunião do time", x: 56, y: 24, w: 20, h: 17, doorSide: "top", locked: false },
+    { id: "manager", kind: "DIRECTOR", name: "Diretoria", x: 71, y: 2, w: 23, h: 18, doorSide: "bottom", locked: false },
+    { id: "cafe", kind: "CUSTOM", name: "Café & Lounge", x: 25, y: 38, w: 21, h: 18, doorSide: "top", locked: false },
+    { id: "general", kind: "AUDITORIUM", name: "All Hands", x: 48, y: 38, w: 28, h: 18, doorSide: "top", locked: false },
+    { id: "library", kind: "CUSTOM", name: "Biblioteca", x: 78, y: 38, w: 16, h: 18, doorSide: "top", locked: false },
   );
-  add("manager-desk", "desk-cubicle-dark", 66, 9);
-  add("manager-monitor", "monitor", 66, 8.7, { collides: null });
-  add("manager-chair", "chair-orange", 66, 11.2, { facing: "up" });
-  add("manager-sofa", "sofa", 60, 14);
-  add("manager-shelf", "bookshelf", 58, 4);
-  add("manager-plant", "plant-tree", 73.5, 15.5);
-  add("manager-board", "whiteboard", 66, 3.5, { collides: null });
-  add("general-table", "table-long", 66, 32.5, { scale: 1.6 });
+
+  add("manager-desk", "desk-cubicle-dark", 82.5, 9);
+  add("manager-monitor", "monitor", 82.5, 8.7, { collides: null });
+  add("manager-chair", "chair-orange", 82.5, 11.2, { facing: "up" });
+  add("manager-sofa", "sofa", 75.5, 14.8);
+  add("manager-shelf", "bookshelf", 72.5, 4);
+  add("manager-plant", "plant-tree", 92, 16);
+  add("manager-board", "world-map", 82, 3.4, { collides: null });
+
+  add("general-table", "table-long", 62, 47.5, { scale: 1.8 });
   for (let i = 0; i < 6; i++) {
-    add(`general-chair-n-${i}`, "chair-navy", 60.75 + i * 2.1, 29.7, { facing: "down" });
-    add(`general-chair-s-${i}`, "chair-navy", 60.75 + i * 2.1, 35.3, { facing: "up" });
+    add(`general-chair-n-${i}`, "chair-navy", 54.5 + i * 3, 43.9, { facing: "down" });
+    add(`general-chair-s-${i}`, "chair-navy", 54.5 + i * 3, 51.1, { facing: "up" });
   }
-  add("general-board", "whiteboard", 70, 25.5, { collides: null });
-  add("general-plant", "plant-tree", 74, 38.5);
-  add("general-water", "watercooler", 58, 38.5);
-  add("hall-plant-left", "plant-tree", 3.5, 21.5);
-  add("hall-plant-right", "plant-tree", 74.5, 21.5);
-  return { version: 3, mapCols: 78, mapRows: 43, rooms, furniture, zones: [] };
+  add("general-board", "whiteboard", 69, 39.3, { collides: null });
+  add("general-plant", "plant-tree", 74.2, 53.8);
+  add("general-water", "watercooler", 49.5, 53.8);
+
+  add("cafe-counter", "desk-cubicle-dark", 35.5, 42, { scale: 1.45 });
+  add("cafe-machine", "coffee-machine", 35.5, 41.5, { collides: null, scale: 1.2 });
+  add("cafe-sofa-west", "sofa", 29.5, 49.5, { scale: .85 });
+  add("cafe-sofa-east", "sofa", 41.5, 49.5, { scale: .85 });
+  add("cafe-rug", "rug", 35.5, 50, { scale: 4, collides: null });
+  add("cafe-pouf-1", "pouf", 34, 49.7, { scale: 1.1, collides: null });
+  add("cafe-pouf-2", "pouf", 37, 49.7, { scale: 1.1, collides: null });
+  add("cafe-plant-1", "plant-pot-a", 27, 54, { scale: 1.2, collides: null });
+  add("cafe-plant-2", "plant-pot-b", 44, 54, { scale: 1.2, collides: null });
+
+  add("library-shelf-1", "bookshelf", 80, 41);
+  add("library-shelf-2", "bookshelf", 83, 41);
+  add("library-shelf-3", "bookshelf", 86, 41);
+  add("library-shelf-4", "bookshelf", 89, 41);
+  add("library-sofa", "sofa", 86, 50, { scale: .9 });
+  add("library-rug", "rug", 86, 49.8, { scale: 3.2, collides: null });
+  add("library-lamp", "desk-lamp", 91.5, 53, { scale: 1.3, collides: null });
+  add("library-plant", "plant-tree", 80, 53.5);
+
+  // The open middle floor is the social heart of the campus.
+  add("commons-reception", "desk-cubicle-dark", 48, 25, { scale: 1.2 });
+  add("commons-laptop", "laptop", 48, 24.6, { collides: null, scale: 1.2 });
+  add("commons-rug-1", "rug", 40, 29, { scale: 4, collides: null });
+  add("commons-rug-2", "rug", 56, 29, { scale: 4, collides: null });
+  add("commons-sofa-1", "sofa", 33, 30, { scale: .75 });
+  add("commons-sofa-2", "sofa", 63, 30, { scale: .75 });
+  add("commons-board", "corkboard", 48, 32.8, { collides: null, scale: 1.5 });
+  for (const [id, x, y] of [["nw", 3.5, 23.5], ["sw", 3.5, 35.5], ["ne", 92.5, 23.5], ["se", 92.5, 35.5]] as const) {
+    add(`hall-plant-${id}`, "plant-tree", x, y);
+  }
+  add("garden-sofa", "sofa", 11.5, 29, { scale: 1.2 });
+  add("garden-rug", "rug", 11.5, 29, { scale: 4, collides: null });
+  add("welcome-table", "table-long", 83, 28.8, { scale: .75 });
+  add("welcome-pouf-1", "pouf", 80.5, 31.2, { collides: null });
+  add("welcome-pouf-2", "pouf", 85.5, 31.2, { collides: null });
+
+  const zones: InteractionZone[] = [
+    { id: "focus-garden", name: "Jardim de foco", x: 2, y: 23, w: 19, h: 12, effects: [{ type: "SILENT" }] },
+    { id: "central-commons", name: "Praça central", x: 24, y: 23, w: 48, h: 12, effects: [{ type: "CONVERSATION" }] },
+    { id: "welcome-hub", name: "Recepção social", x: 75, y: 23, w: 19, h: 12, effects: [{ type: "CONVERSATION" }] },
+    { id: "cafe-talk", name: "Conversa do café", x: 25.5, y: 38.5, w: 20, h: 17, effects: [{ type: "CONVERSATION" }] },
+    { id: "library-silent", name: "Silêncio na biblioteca", x: 78.5, y: 38.5, w: 15, h: 17, effects: [{ type: "SILENT" }] },
+  ];
+  return { version: 4, mapCols: 96, mapRows: 58, rooms, furniture, zones };
 }
 
 export const DEFAULT_OFFICE_LAYOUT = buildDefaultLayout();
@@ -429,8 +483,11 @@ export function resolveOfficeLayout(layout?: OfficeLayout): OfficeLayout {
   let fingerprint = 2166136261;
   for (const character of value) fingerprint = Math.imul(fingerprint ^ character.charCodeAt(0), 16777619);
   const oldSeed = layout.version === 1 && (fingerprint >>> 0).toString(16) === "b4adb066";
-  if (oldSeed) return DEFAULT_OFFICE_LAYOUT;
+  const previousBundledSeed = layout.version <= 3 && layout.mapCols === 78 && layout.mapRows === 43
+    && layout.rooms.length === 10 && layout.furniture.length === 125
+    && ["squad-1", "squad-2", "squad-3", "squad-4", "manager", "general"].every((id) => layout.rooms.some((room) => room.id === id));
+  if (oldSeed || previousBundledSeed) return DEFAULT_OFFICE_LAYOUT;
   // Layouts already stored before zones existed remain valid and gain an
   // empty collection without a database migration (mapData is JSON).
-  return { ...layout, version: Math.max(layout.version, 3), zones: Array.isArray(layout.zones) ? layout.zones : [] };
+  return { ...layout, version: Math.max(layout.version, 4), zones: Array.isArray(layout.zones) ? layout.zones : [] };
 }

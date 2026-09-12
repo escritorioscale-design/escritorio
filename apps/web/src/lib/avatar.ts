@@ -1,77 +1,84 @@
-export const AVATAR_SKIN_TONES = ["#f6d2b8", "#e7b98f", "#c8895e", "#9b5f3f", "#70422f", "#3f271f"] as const;
-export const AVATAR_HAIR_COLORS = ["#211b18", "#4a3026", "#7a4b2d", "#b8773e", "#d6b06a", "#8a2934", "#d8d4ce", "#4f6fd8", "#c85fd0"] as const;
-export const AVATAR_TOP_COLORS = ["#7257e8", "#397bd9", "#21a179", "#d84d68", "#e58c35", "#252529", "#f1efe9", "#d8ff63", "#8a3ffc", "#0f9aa8"] as const;
-export const AVATAR_BOTTOM_COLORS = ["#253047", "#3f526f", "#6a594c", "#242426", "#805f9b", "#d8d4ca", "#7a2b30"] as const;
-export const AVATAR_SHOE_COLORS = ["#f4f1e9", "#28282b", "#6e4935", "#d04a50", "#d8ff63"] as const;
-export const AVATAR_BODY_TYPES = ["male", "female"] as const;
-export const AVATAR_HAIR_STYLES = [
-  "short", "bob", "curls", "bun", "long", "ponytail", "mohawk", "afro", "spiky", "bald",
-  "dreadlocks", "cornrows", "natural", "swoop", "pixie", "loose",
-] as const;
-export const AVATAR_TOP_STYLES = ["tshirt", "hoodie", "jacket", "blazer", "tank"] as const;
-export const AVATAR_BOTTOM_STYLES = ["pants", "shorts", "skirt", "leggings"] as const;
-export const AVATAR_ACCESSORIES = ["glasses", "sunglasses", "hat", "tophat", "bowtie", "necklace", "earrings"] as const;
-export const AVATAR_SKINS = ["custom", "adam", "alex", "amelia", "bob"] as const;
+import { isWokaTexture, WOKA_BODY_PARTS, WOKA_CATALOG, type WokaBodyPart } from "@/lib/workadventure-woka";
 
 export type AvatarAppearance = {
-  skin: (typeof AVATAR_SKINS)[number];
-  bodyType: (typeof AVATAR_BODY_TYPES)[number];
-  skinTone: (typeof AVATAR_SKIN_TONES)[number];
-  hairStyle: (typeof AVATAR_HAIR_STYLES)[number];
-  hairColor: (typeof AVATAR_HAIR_COLORS)[number];
-  topStyle: (typeof AVATAR_TOP_STYLES)[number];
-  topColor: (typeof AVATAR_TOP_COLORS)[number];
-  bottomStyle: (typeof AVATAR_BOTTOM_STYLES)[number];
-  bottomColor: (typeof AVATAR_BOTTOM_COLORS)[number];
-  shoeColor: (typeof AVATAR_SHOE_COLORS)[number];
-  accessories: (typeof AVATAR_ACCESSORIES)[number][];
+  format: "woka-v1";
+  body: string;
+  eyes: string;
+  clothes: string;
+  hair: string;
+  hat: string;
+  accessory: string;
 };
 
 export const DEFAULT_AVATAR: AvatarAppearance = {
-  skin: "custom",
-  bodyType: "male",
-  skinTone: "#c8895e",
-  hairStyle: "short",
-  hairColor: "#211b18",
-  topStyle: "tshirt",
-  topColor: "#7257e8",
-  bottomStyle: "pants",
-  bottomColor: "#253047",
-  shoeColor: "#f4f1e9",
-  accessories: [],
+  format: "woka-v1",
+  body: "body8",
+  eyes: "eyes3",
+  clothes: "clothes24",
+  hair: "hair18",
+  hat: "",
+  accessory: "",
 };
 
-function allowed<T extends readonly string[]>(value: unknown, options: T, fallback: T[number]): T[number] {
-  return typeof value === "string" && options.includes(value) ? value as T[number] : fallback;
+const PRESETS: AvatarAppearance[] = [
+  DEFAULT_AVATAR,
+  { format: "woka-v1", body: "body3", eyes: "eyes8", clothes: "clothes12", hair: "hair7", hat: "hat11", accessory: "" },
+  { format: "woka-v1", body: "body15", eyes: "eyes2", clothes: "clothes38", hair: "hair28", hat: "", accessory: "accessory9" },
+  { format: "woka-v1", body: "body21", eyes: "eyes14", clothes: "clothes55", hair: "hair43", hat: "hat4", accessory: "" },
+  { format: "woka-v1", body: "body29", eyes: "eyes20", clothes: "clothes67", hair: "hair62", hat: "", accessory: "accessory17" },
+];
+
+function fallbackFor(part: WokaBodyPart): string {
+  return DEFAULT_AVATAR[part];
 }
 
+function stableIndex(value: unknown, size: number): number {
+  const source = JSON.stringify(value) || "orbit";
+  let hash = 2166136261;
+  for (const character of source) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0) % size;
+}
+
+/**
+ * Accepts the native Woka payload and transparently migrates older Orbit
+ * avatars to a deterministic Woka preset. The profile column is JSON, so no
+ * database migration is required.
+ */
 export function normalizeAvatar(value: unknown, legacyColor?: string): AvatarAppearance {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const legacyTop = typeof legacyColor === "string" && (AVATAR_TOP_COLORS as readonly string[]).includes(legacyColor)
-    ? legacyColor as AvatarAppearance["topColor"]
-    : DEFAULT_AVATAR.topColor;
+  const looksLikeWoka = input.format === "woka-v1" || WOKA_BODY_PARTS.some((part) => typeof input[part] === "string");
 
-  const rawAccessories = Array.isArray(input.accessories)
-    ? input.accessories
-    : typeof input.accessory === "string" && input.accessory !== "none"
-      ? [input.accessory]
-      : [];
-  const accessories = Array.from(new Set(
-    rawAccessories.filter((item): item is AvatarAppearance["accessories"][number] =>
-      typeof item === "string" && (AVATAR_ACCESSORIES as readonly string[]).includes(item)),
-  ));
+  if (looksLikeWoka) {
+    return {
+      format: "woka-v1",
+      body: isWokaTexture("body", input.body) ? input.body : fallbackFor("body"),
+      eyes: isWokaTexture("eyes", input.eyes) ? input.eyes : fallbackFor("eyes"),
+      clothes: isWokaTexture("clothes", input.clothes) ? input.clothes : fallbackFor("clothes"),
+      hair: isWokaTexture("hair", input.hair) ? input.hair : fallbackFor("hair"),
+      hat: isWokaTexture("hat", input.hat, true) ? input.hat : "",
+      accessory: isWokaTexture("accessory", input.accessory, true) ? input.accessory : "",
+    };
+  }
 
+  return { ...PRESETS[stableIndex([value, legacyColor], PRESETS.length)] };
+}
+
+export function wokaPreset(index: number): AvatarAppearance {
+  return { ...PRESETS[((index % PRESETS.length) + PRESETS.length) % PRESETS.length] };
+}
+
+export function randomWokaAppearance(): AvatarAppearance {
+  const choose = (part: WokaBodyPart) => {
+    const textures = WOKA_CATALOG[part];
+    return textures[Math.floor(Math.random() * textures.length)]?.id ?? fallbackFor(part);
+  };
   return {
-    skin: allowed(input.skin, AVATAR_SKINS, DEFAULT_AVATAR.skin),
-    bodyType: allowed(input.bodyType, AVATAR_BODY_TYPES, DEFAULT_AVATAR.bodyType),
-    skinTone: allowed(input.skinTone, AVATAR_SKIN_TONES, DEFAULT_AVATAR.skinTone),
-    hairStyle: allowed(input.hairStyle, AVATAR_HAIR_STYLES, DEFAULT_AVATAR.hairStyle),
-    hairColor: allowed(input.hairColor, AVATAR_HAIR_COLORS, DEFAULT_AVATAR.hairColor),
-    topStyle: allowed(input.topStyle, AVATAR_TOP_STYLES, DEFAULT_AVATAR.topStyle),
-    topColor: allowed(input.topColor, AVATAR_TOP_COLORS, legacyTop),
-    bottomStyle: allowed(input.bottomStyle, AVATAR_BOTTOM_STYLES, DEFAULT_AVATAR.bottomStyle),
-    bottomColor: allowed(input.bottomColor, AVATAR_BOTTOM_COLORS, DEFAULT_AVATAR.bottomColor),
-    shoeColor: allowed(input.shoeColor, AVATAR_SHOE_COLORS, DEFAULT_AVATAR.shoeColor),
-    accessories,
+    format: "woka-v1",
+    body: choose("body"),
+    eyes: choose("eyes"),
+    clothes: choose("clothes"),
+    hair: choose("hair"),
+    hat: Math.random() > .45 ? choose("hat") : "",
+    accessory: Math.random() > .7 ? choose("accessory") : "",
   };
 }

@@ -124,7 +124,7 @@ test('legacy layouts are upgraded with an empty interaction-zone collection', ()
   delete legacy.zones;
   const resolved = resolveOfficeLayout(legacy);
   assert.deepEqual(resolved.zones, []);
-  assert.equal(resolved.version, 3);
+  assert.equal(resolved.version, 4);
 });
 
 test('conversation areas isolate and carry voice across their full geometry', () => {

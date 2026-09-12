@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { OfficeBuilder, type LocalMoveState } from "@/components/office-builder";
 import { AvatarCharacter } from "@/components/avatar-character";
-import { DEFAULT_AVATAR } from "@/lib/avatar";
+import { wokaPreset } from "@/lib/avatar";
 export type { LocalMoveState } from "@/components/office-builder";
 
 /** The preview runs the very same editable office and simulation as /workspace. */
@@ -13,7 +13,7 @@ export function ModernOfficePreview() {
     <OfficeBuilder onUpdate={setPlayer} showStatus>
       <div className="map-character self-character" aria-label="Seu personagem"
         style={{ left: `${player.xPercent}%`, top: `${player.yPercent}%`, zIndex: Math.round(20 + player.yPercent) }}>
-        <AvatarCharacter appearance={{ ...DEFAULT_AVATAR, skin: "adam" }} direction={player.direction} moving={player.moving} sitting={player.sitting} />
+        <AvatarCharacter appearance={wokaPreset(1)} direction={player.direction} moving={player.moving} sitting={player.sitting} />
         <label>Você</label>
       </div>
     </OfficeBuilder>

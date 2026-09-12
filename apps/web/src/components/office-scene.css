@@ -5,7 +5,11 @@
 .office-real-floor.floor-creative { background-color: #c4cfca; }
 .office-real-floor.floor-director { background-color: #c3b299; background-image: repeating-linear-gradient(0deg,transparent 0 15px,#77654d24 15px 16px),repeating-linear-gradient(90deg,transparent 0 63px,#fff2 63px 65px); }
 .office-real-floor.floor-meeting { background-color: #bac4ce; }
+.office-real-floor.floor-auditorium { background-color:#b8c1c8; background-image:repeating-linear-gradient(90deg,transparent 0 31px,#62727b1c 31px 32px),repeating-linear-gradient(0deg,transparent 0 63px,#fff2 63px 65px); }
+.office-real-floor[data-room="cafe"] { background-color:#cbb89f; background-image:repeating-linear-gradient(0deg,transparent 0 15px,#725b4520 15px 16px),repeating-linear-gradient(90deg,transparent 0 63px,#fff3 63px 65px); }
+.office-real-floor[data-room="library"] { background-color:#b7c8bb; background-image:repeating-linear-gradient(45deg,transparent 0 20px,#466b5212 20px 21px); }
 .office-real-floor.is-inner { box-shadow: inset 0 14px 18px #41596324; }
+.office-world-room-label{position:absolute;z-index:6;display:grid;gap:2px;max-width:180px;padding:5px 7px;border:1px solid rgba(33,42,37,.12);border-radius:6px;background:rgba(248,248,242,.72);box-shadow:0 3px 9px rgba(33,42,37,.08);backdrop-filter:blur(3px);pointer-events:none}.office-world-room-label strong{overflow:hidden;color:#38453d;font:900 9px/1.15 Manrope,sans-serif;letter-spacing:.08em;text-overflow:ellipsis;text-transform:uppercase;white-space:nowrap}.office-world-room-label span{color:#718077;font-size:7px;font-weight:700}.office-world-room-label.compact{padding:4px 5px;background:rgba(225,235,237,.72)}.office-world-room-label.compact strong{font-size:7px}.office-world-room-label.compact span{display:none}
 .world-interaction-zone { position: absolute; z-index: 2; border: 2px dashed rgba(114,87,232,.25); border-radius: 12px; background: rgba(114,87,232,.035); pointer-events: none; transition: border-color .2s, background .2s, box-shadow .2s; }
 .world-interaction-zone.silent { border-color: rgba(184,121,33,.26); background: rgba(236,173,66,.035); }
 .world-interaction-zone.action { border-color: rgba(36,139,123,.25); background: rgba(60,177,158,.035); }

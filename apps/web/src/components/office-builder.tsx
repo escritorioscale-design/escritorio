@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  DEFAULT_OFFICE_LAYOUT, TILE, doorRect, getWalls, zoneHasEffect,
+  DEFAULT_OFFICE_LAYOUT, ROOM_KIND_LABELS, TILE, doorRect, getWalls, zoneHasEffect,
   type OfficeLayout, type Rect,
 } from "@/lib/office-layout";
 import { OfficeSimulation, type MovementState, type RestrictedZone, type WorldInput } from "@/lib/office-simulation";
@@ -157,8 +157,12 @@ export function OfficeBuilder({ layout = DEFAULT_OFFICE_LAYOUT, occupiedSeatIds 
         </div>
       </div>
       <div ref={worldRef} className="css-office-world office-real-world" style={{ width: worldW, height: worldH }} onDoubleClick={walk}>
-        {layout.rooms.map((room) => <div key={`floor-${room.id}`} className={`office-real-floor floor-${room.kind.toLowerCase()} ${room.parentId ? "is-inner" : ""}`}
+        {layout.rooms.map((room) => <div key={`floor-${room.id}`} data-room={room.id} className={`office-real-floor floor-${room.kind.toLowerCase()} ${room.parentId ? "is-inner" : ""}`}
           style={{ left: room.x * TILE, top: room.y * TILE, width: room.w * TILE, height: room.h * TILE }} />)}
+        {layout.rooms.map((room) => <div key={`label-${room.id}`} className={`office-world-room-label${room.parentId ? " compact" : ""}`}
+          style={{ left: (room.x + .8) * TILE, top: (room.y + .8) * TILE }}>
+          <strong>{room.name}</strong><span>{ROOM_KIND_LABELS[room.kind]}</span>
+        </div>)}
         {(layout.zones ?? []).map((zone) => {
           const tone = zoneHasEffect(zone, "SILENT") ? "silent" : zoneHasEffect(zone, "CONVERSATION") ? "conversation" : "action";
           return <div

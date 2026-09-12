@@ -64,6 +64,12 @@ npm audit --omit=dev
 O build gera uma aplicação Next.js standalone e um serviço realtime compilado
 em `apps/realtime/dist`.
 
+## Assets de terceiros
+
+O editor de personagens usa os assets Woka do WorkAdventure. A origem, a
+revisão incorporada e os termos aplicáveis estão registrados em
+[`apps/web/public/workadventure/THIRD_PARTY_NOTICES.md`](apps/web/public/workadventure/THIRD_PARTY_NOTICES.md).
+
 ## Produção
 
 - Use secrets exclusivos e rotacionáveis; nunca os valores locais do Compose.

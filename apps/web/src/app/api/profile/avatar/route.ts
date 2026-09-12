@@ -2,32 +2,16 @@ import { db } from "@orbit/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import {
-  AVATAR_ACCESSORIES,
-  AVATAR_BODY_TYPES,
-  AVATAR_BOTTOM_COLORS,
-  AVATAR_BOTTOM_STYLES,
-  AVATAR_HAIR_COLORS,
-  AVATAR_HAIR_STYLES,
-  AVATAR_SHOE_COLORS,
-  AVATAR_SKIN_TONES,
-  AVATAR_SKINS,
-  AVATAR_TOP_COLORS,
-  AVATAR_TOP_STYLES,
-} from "@/lib/avatar";
+import { isWokaTexture } from "@/lib/workadventure-woka";
 
 const avatarSchema = z.object({
-  skin: z.enum(AVATAR_SKINS),
-  bodyType: z.enum(AVATAR_BODY_TYPES),
-  skinTone: z.enum(AVATAR_SKIN_TONES),
-  hairStyle: z.enum(AVATAR_HAIR_STYLES),
-  hairColor: z.enum(AVATAR_HAIR_COLORS),
-  topStyle: z.enum(AVATAR_TOP_STYLES),
-  topColor: z.enum(AVATAR_TOP_COLORS),
-  bottomStyle: z.enum(AVATAR_BOTTOM_STYLES),
-  bottomColor: z.enum(AVATAR_BOTTOM_COLORS),
-  shoeColor: z.enum(AVATAR_SHOE_COLORS),
-  accessories: z.array(z.enum(AVATAR_ACCESSORIES)).max(AVATAR_ACCESSORIES.length),
+  format: z.literal("woka-v1"),
+  body: z.string().refine((value) => isWokaTexture("body", value)),
+  eyes: z.string().refine((value) => isWokaTexture("eyes", value)),
+  clothes: z.string().refine((value) => isWokaTexture("clothes", value)),
+  hair: z.string().refine((value) => isWokaTexture("hair", value)),
+  hat: z.string().refine((value) => isWokaTexture("hat", value, true)),
+  accessory: z.string().refine((value) => isWokaTexture("accessory", value, true)),
 }).strict();
 
 export async function PUT(request: Request) {

@@ -178,6 +178,39 @@
 .office-theme-studio { background-color: #c7b8b0; background-image: linear-gradient(90deg,rgba(255,255,255,.14) 1px,transparent 1px),linear-gradient(rgba(104,70,58,.1) 1px,transparent 1px); }.office-theme-studio .map-room { filter: saturate(1.12); }
 .decor-toggle { display: flex; align-items: center; gap: 10px; width: calc(100% - 50px); margin: 0 25px 24px; padding: 11px 12px; border: 1px solid #deded7; border-radius: 10px; background: #fafaf7; text-align: left; cursor: pointer; }.decor-toggle.selected { border-color: #c9bef5; background: #f5f2ff; }.decor-toggle-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; background: #d8ff63; color: #393d24; }.decor-toggle span:nth-child(2) { display: grid; gap: 2px; flex: 1; }.decor-toggle strong { font-size: 10px; }.decor-toggle small { color: #8a8b83; font-size: 8px; }.decor-toggle>b { color: #7257e8; font-size: 8px; }
 
+/* WorkAdventure Woka studio. The source sheets stay at their native 32px
+   grid and are enlarged with nearest-neighbour rendering. */
+.woka-character .avatar-canvas { image-rendering: pixelated; }
+.woka-studio { width:min(1040px,100%); height:min(760px,calc(100dvh - 44px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,.72); border-radius:24px; background:#f7f7f3; box-shadow:0 34px 110px rgba(12,14,12,.38); }
+.woka-studio-header { min-height:86px; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding:21px 24px 18px; border-bottom:1px solid #deded6; background:rgba(255,255,255,.92); }
+.woka-studio-header span,.woka-options-heading span,.woka-preview-kicker { color:#6b56d9; font-size:8px; font-weight:900; letter-spacing:.14em; }
+.woka-studio-header h2 { margin:4px 0 3px; font:800 23px/1.1 Manrope,sans-serif; letter-spacing:-.035em; }
+.woka-studio-header p { margin:0; color:#85867d; font-size:10px; }
+.woka-close { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border:1px solid #deded6; border-radius:10px; background:white; color:#686960; cursor:pointer; }
+.woka-close:hover { background:#efefe9; color:#20211c; }.woka-close svg{width:16px}
+.woka-studio-body { min-height:0; flex:1; display:grid; grid-template-columns:300px minmax(0,1fr); }
+.woka-preview-panel { position:relative; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; padding:28px 24px; border-right:1px solid rgba(255,255,255,.09); background:radial-gradient(circle at 50% 42%,rgba(190,255,103,.2),transparent 29%),linear-gradient(155deg,#262b2c 0%,#16191a 72%); color:white; }
+.woka-preview-grid { position:absolute; inset:0; opacity:.16; background-image:linear-gradient(rgba(255,255,255,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.15) 1px,transparent 1px); background-size:24px 24px; mask-image:linear-gradient(to bottom,black,transparent 80%); }
+.woka-preview-kicker { position:relative; color:#d8ff63; }
+.woka-preview-character { position:relative; width:158px; height:180px; display:grid; place-items:center; margin:10px 0 4px; }
+.woka-preview-character::before { content:""; position:absolute; left:19px; right:19px; bottom:22px; height:25px; border-radius:50%; background:rgba(0,0,0,.34); filter:blur(5px); }
+.woka-preview-character .avatar-character { transform:scale(2.25); }
+.woka-preview-panel>strong { position:relative; font:800 16px Manrope,sans-serif; }
+.woka-preview-status { position:relative; display:flex; align-items:center; gap:6px; margin-top:5px; color:#aeb2ad; font-size:9px; }.woka-preview-status i{width:7px;height:7px;border-radius:50%;background:#73e3aa;box-shadow:0 0 0 3px rgba(115,227,170,.12)}
+.woka-preview-actions { position:relative; width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:28px; }
+.woka-preview-actions button { min-height:40px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid rgba(255,255,255,.13); border-radius:10px; background:rgba(255,255,255,.07); color:white; font-size:9px; font-weight:800; cursor:pointer; }.woka-preview-actions button:hover{background:rgba(255,255,255,.13)}.woka-preview-actions svg{width:14px}
+.woka-customizer { min-width:0; min-height:0; display:flex; flex-direction:column; padding:18px 22px 16px; }
+.woka-parts { display:grid; grid-template-columns:repeat(6,minmax(70px,1fr)); gap:6px; padding-bottom:16px; border-bottom:1px solid #dfdfd7; overflow-x:auto; }
+.woka-parts button { min-height:54px; display:grid; place-items:center; align-content:center; gap:4px; border:1px solid transparent; border-radius:11px; background:transparent; color:#888981; font-size:8px; font-weight:800; cursor:pointer; }.woka-parts button:hover{background:white;color:#4d4e47}.woka-parts button.active{border-color:#cfc5ff;background:#eeeaff;color:#5c45c4;box-shadow:0 5px 15px rgba(91,69,196,.08)}.woka-parts svg{width:17px;height:17px}
+.woka-options-heading { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:16px 2px 10px; }.woka-options-heading>div{display:grid;gap:3px}.woka-options-heading strong{font:800 15px Manrope,sans-serif}.woka-options-heading small{color:#96978f;font-size:8px;font-weight:700}
+.woka-options { min-height:0; flex:1; display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); align-content:start; gap:8px; overflow-y:auto; padding:2px 5px 10px 2px; scrollbar-width:thin; }
+.woka-option { position:relative; min-height:66px; display:grid; place-items:center; overflow:hidden; border:1px solid #dddcd4; border-radius:12px; background:#fff; cursor:pointer; }.woka-option:hover{border-color:#bdb0ff;background:#f8f6ff;transform:translateY(-1px)}.woka-option.selected{border-color:#755de5;background:#eeeaff;box-shadow:0 0 0 2px rgba(117,93,229,.14)}
+.woka-option>i { width:32px; height:32px; display:block; background-repeat:no-repeat; background-position:0 0; background-size:96px 128px; image-rendering:pixelated; transform:scale(1.48); }
+.woka-option>b { position:absolute; right:5px; top:5px; width:17px; height:17px; display:grid; place-items:center; border-radius:50%; background:#6d55dc; color:white; }.woka-option>b svg{width:10px}.woka-option.woka-none{align-content:center;gap:3px;color:#85867d;font-size:8px;font-weight:800}.woka-option.woka-none svg{width:17px}
+.woka-profile-photo { display:grid; grid-template-columns:42px minmax(0,1fr) auto auto; align-items:center; gap:10px; margin-top:7px; padding:10px; border:1px solid #dfdfd7; border-radius:12px; background:#fff; }.woka-photo-preview{width:42px;height:42px;display:grid;place-items:end center;overflow:hidden;border-radius:10px;background:#e9e9e2}.woka-photo-preview img{width:100%;height:100%;object-fit:cover}.woka-photo-preview .avatar-character{transform:translateY(3px)}.woka-profile-photo>div:nth-child(2){display:grid;gap:2px}.woka-profile-photo strong{font-size:9px}.woka-profile-photo span{color:#92938b;font-size:8px}.woka-profile-photo label,.woka-profile-photo>button{height:32px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 10px;border:1px solid #dcdcd5;border-radius:8px;background:#f7f7f3;color:#5d5e57;font-size:8px;font-weight:800;cursor:pointer}.woka-profile-photo label:hover,.woka-profile-photo>button:hover{border-color:#bdb0ff}.woka-profile-photo svg{width:13px}
+.woka-inline-error { margin:0;padding:8px 22px;background:#fff0f0;color:#ad3a3d;font-size:9px; }
+.woka-studio-footer { min-height:66px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 22px; border-top:1px solid #deded6; background:white; }.woka-studio-footer>small{color:#9a9b93;font-size:8px}.woka-studio-footer>div{display:flex;gap:8px}.woka-studio-footer button{height:40px;padding:0 15px;border-radius:10px;font-size:9px;font-weight:850;cursor:pointer}.woka-cancel{border:1px solid #dcdcd5;background:#fff}.woka-save{display:flex;align-items:center;gap:6px;border:0;background:#1e201d;color:white}.woka-save:hover{background:#343731}.woka-save:disabled{opacity:.55;cursor:wait}.woka-save svg{width:14px}
+
 @media(max-width:700px) {
   .office-actions .customize { display: flex !important; width: 38px; padding: 0; font-size: 0; }
   .map-character { width: clamp(42px, 12cqw, 56px); height: clamp(42px, 12cqw, 56px); transform: translate(-50%,-72%); }
@@ -192,4 +225,20 @@
   .office-request-card button { grid-row: 2; }
   .decor-window,.decor-printer,.decor-coffee { display: none; }
   .office-customizer-backdrop { padding: 0; align-items: end; }.office-customizer { border-radius: 20px 20px 0 0; }.office-customizer>header { padding: 20px; }.office-theme-grid { grid-template-columns: 1fr; padding: 18px 20px 12px; }.theme-preview { height: 48px; }.theme-preview::after { margin-top: 17px; }.decor-toggle { width: calc(100% - 40px); margin: 0 20px 20px; }
+  .woka-studio{height:94dvh;border-radius:22px 22px 0 0}.woka-studio-header{min-height:76px;padding:17px 18px 14px}.woka-studio-header h2{font-size:19px}.woka-studio-header p{display:none}.woka-studio-body{display:block;overflow-y:auto}.woka-preview-panel{min-height:245px;border-right:0}.woka-preview-character{height:128px;margin:2px 0}.woka-preview-character .avatar-character{transform:scale(1.7)}.woka-preview-actions{max-width:290px;margin-top:14px}.woka-customizer{overflow:visible;padding:14px}.woka-parts{grid-template-columns:repeat(6,65px)}.woka-parts button{min-height:48px}.woka-options{max-height:310px;grid-template-columns:repeat(4,1fr);overflow-y:auto}.woka-profile-photo{grid-template-columns:38px minmax(0,1fr) auto}.woka-profile-photo>button{display:none}.woka-studio-footer{padding:11px 14px}.woka-studio-footer>small{display:none}.woka-studio-footer>div{width:100%;display:grid;grid-template-columns:1fr 1fr}.woka-studio-footer button{justify-content:center}
+}
+
+/* Keep the map HUD above the immersive workspace shell. This file is loaded
+   after the scene stylesheet, so these scoped rules are the final authority. */
+.office-shell .office-scene-toolbar { top:86px; left:auto; right:14px; }
+.office-shell .office-scene-toolbar>.office-scene-live { display:none; }
+.office-shell .office-scene-status { left:14px; right:auto; bottom:88px; max-width:460px; }
+.office-shell .proximity-controls { left:14px; bottom:145px; z-index:220; max-width:calc(50vw - 190px); }
+.office-shell .zone-context-card { top:86px; right:14px; }
+
+@media(max-width:700px) {
+  .office-shell .office-scene-toolbar { top:70px; right:8px; }
+  .office-shell .office-scene-status { left:8px; right:auto; bottom:76px; max-width:calc(100vw - 16px); }
+  .office-shell .proximity-controls { left:8px; bottom:136px; max-width:220px; }
+  .office-shell .zone-context-card { top:70px; right:8px; }
 }
