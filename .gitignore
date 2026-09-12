@@ -1,20 +1,28 @@
-node_modules/
-.next/
-dist/
-coverage/
 .env
-.env.local
-!.env.example
-packages/db/src/generated/
-*.log
-.DS_Store
-.neon
-*.tsbuildinfo
-.tmp/
+.idea
+.vagrant
+Vagrantfile
+docker-compose.override.yaml
+*.DS_Store
+maps/yarn.lock
+maps/dist/computer.js
+maps/dist/computer.js.map
+node_modules
+_
+*.code-workspace
+/install.lock
+.vscode/extensions.json
 
-.vercel
-.env*
+# Helm
+# Chart dependencies
+**/charts/*.tgz
 
-# Pacotes de arte licenciados (fonte dos sprites; os PNGs extraidos ficam em public/)
-*.rar
-*.zip
+synapse/homeserver.log*
+synapse/matrix.workadventure.localhost.signing.key
+synapse/homeserver.db
+synapse/homeserver.db-*
+synapse/homeserver.yaml
+synapse/media_store/*
+
+.vscode/settings.json
+play/src/i18n/ko-KR/*.backup

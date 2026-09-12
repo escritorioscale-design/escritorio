@@ -1,82 +1,98 @@
-# Orbit
+![](https://github.com/thecodingmachine/workadventure/workflows/Continuous%20Integration/badge.svg) [![Discord](https://img.shields.io/discord/821338762134290432?label=Discord)](https://discord.gg/G6Xh9ZM9aR) ![Awesome](https://awesome.re/badge.svg)
 
-Escritório virtual multiusuário com presença em tempo real, chamadas por
-proximidade, reuniões e compartilhamento de tela.
+![WorkAdventure office image](README-MAP.png)
 
-O editor também permite criar áreas interativas orientadas a dados: conversas
-isoladas, zonas silenciosas e links contextuais, combináveis no mesmo espaço.
+# WorkAdventure
 
-## Stack
 
-- Next.js 16, React 19 e TypeScript
-- Better Auth com organizações, membros, convites e papéis
-- PostgreSQL e Prisma
-- Socket.IO com Redis Adapter para presença e movimento
-- LiveKit SFU para áudio, vídeo e screen sharing
+WorkAdventure is a platform that allows you to design **fully customizable collaborative virtual worlds** (metaverse).
 
-A separação de responsabilidades e os limites de confiança estão documentados
-em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+With your own avatar, you can **interact spontaneously** with your colleagues, clients, partners (using a **video-chat system**, triggered when you approach someone).
+Imagine **all types of immersive experiences** (recruitments, onboarding, trainings, digital workplace, internal/external events) on desktop, mobile or tablet.
 
-## Desenvolvimento local
+_The little plus? The platform is **GDPR** and **open source**!_
 
-Requisitos: Node.js 20.9+, Docker Desktop e npm.
+**See more features for your [virtual office](https://workadventu.re/virtual-offices/virtual-meetings/?utm_source=github)!**
 
-1. Gere os arquivos locais e secrets automaticamente:
+**Pricing for our [SaaS version](https://workadventu.re/pricing/?utm_source=github)!**
 
-   ```bash
-   npm run setup:dev
-   ```
 
-2. Abra o Docker Desktop e inicie PostgreSQL, Redis e LiveKit:
+[![Workadventure live demo example](https://workadventu.re/wp-content/uploads/2024/02/Button-Live-Demo.png)](https://play.staging.workadventu.re/@/tcm/workadventure/wa-village/?utm_source=github)
+[![Workadventure Website](https://workadventu.re/wp-content/uploads/2024/02/Button-Website.png)](https://workadventu.re/?utm_source=github)
 
-   ```bash
-   npm run infra:up
-   ```
 
-   O PostgreSQL do Orbit usa a porta local `54320` para não conflitar com
-   instalações existentes na porta padrão `5432`.
+###### Support our team!
+[![Discord Logo](https://workadventu.re/wp-content/uploads/2024/02/Icon-Discord.png)](https://discord.com/invite/G6Xh9ZM9aR)
+[![X Social Logo](https://workadventu.re/wp-content/uploads/2024/02/Icon-X.png)](https://twitter.com/Workadventure_)
+[![LinkedIn Logo](https://workadventu.re/wp-content/uploads/2024/02/Icon-LinkedIn.png)](https://www.linkedin.com/company/workadventu-re/)
 
-3. Aplique a migration inicial e gere o client:
 
-   ```bash
-   npm run db:migrate
-   npm run db:generate
-   ```
+![Stats repo](https://github-readme-stats.vercel.app/api?username={username}&theme=transparent)
 
-4. Em terminais separados, inicie o gateway e o app:
 
-   ```bash
-   npm run dev:realtime
-   npm run dev:web
-   ```
 
-O app abre em `http://localhost:3100`. O gateway expõe healthcheck em
-`http://localhost:3101/health`.
+## Community resources
 
-## Qualidade
+1. Want to build your own map, check out our **[map building documentation](https://docs.workadventu.re/map-building/)**
+2. Check out resources developed by the WorkAdventure community at **[awesome-workadventure](https://github.com/workadventure/awesome-workadventure)**
 
-```bash
-npm run typecheck
-npm run build
-npm audit --omit=dev
+## Setting up a production environment
+
+We support 2 ways to set up a production environment:
+
+- using Docker Compose
+- or using a Helm chart for Kubernetes
+
+Please check the [Setting up a production environment](docs/others/self-hosting/install.md) guide for more information.
+
+> [!NOTE]
+> WorkAdventure also provides a [hosted version](https://workadventu.re/?utm_source=github) of the application. Using the hosted version is
+> the easiest way to get started and helps us to keep the project alive.
+
+## Setting up a development environment
+
+> [!NOTE]
+> These installation instructions are for local development only. They will not work on
+> remote servers as local environments do not have HTTPS certificates.
+
+Install Docker and clone this repository.
+
+> [!WARNING]
+> If you are using Windows, make sure the End-Of-Line character is not modified by the cloning process by setting
+> the `core.autocrlf` setting to false: `git config --global core.autocrlf false`
+
+Run:
+
+```
+cp .env.template .env
+docker-compose up
 ```
 
-O build gera uma aplicação Next.js standalone e um serviço realtime compilado
-em `apps/realtime/dist`.
+The environment will start with the OIDC mock server enabled by default.
 
-## Assets de terceiros
+You should now be able to browse to http://play.workadventure.localhost/ and see the application.
+You can view the Traefik dashboard at http://traefik.workadventure.localhost
 
-O editor de personagens usa os assets Woka do WorkAdventure. A origem, a
-revisão incorporada e os termos aplicáveis estão registrados em
-[`apps/web/public/workadventure/THIRD_PARTY_NOTICES.md`](apps/web/public/workadventure/THIRD_PARTY_NOTICES.md).
+(Test user is "User1" and password is "pwd")
 
-## Produção
+If you want to disable the OIDC mock server (for anonymous access), you can run:
 
-- Use secrets exclusivos e rotacionáveis; nunca os valores locais do Compose.
-- Use PostgreSQL gerenciado com pool de conexões e backups automáticos.
-- Exponha web e realtime apenas por TLS (`https`/`wss`).
-- Para múltiplas instâncias realtime, Redis é obrigatório.
-- Use LiveKit Cloud ou um cluster LiveKit regional. Não publique as portas de
-  mídia do Compose local diretamente na internet.
-- Adicione observabilidade, rate limiting no edge e filas para e-mail/auditoria
-  antes de abrir cadastro público.
+```console
+$ docker-compose -f docker-compose.yaml -f docker-compose-no-oidc.yaml up
+```
+
+Note: on some OSes, you will need to add this line to your `/etc/hosts` file:
+
+**/etc/hosts**
+```
+127.0.0.1 oidc.workadventure.localhost redis.workadventure.localhost play.workadventure.localhost traefik.workadventure.localhost matrix.workadventure.localhost extra.workadventure.localhost icon.workadventure.localhost map-storage.workadventure.localhost uploader.workadventure.localhost maps.workadventure.localhost api.workadventure.localhost front.workadventure.localhost
+```
+
+
+### Troubleshooting
+
+See our [troubleshooting guide](docs/others/troubleshooting.md). 
+
+### Render (single-service deployment)
+
+This fork also includes a cost-optimized Render deployment that runs the WorkAdventure services in one container. See [`deploy/render/README.md`](deploy/render/README.md).

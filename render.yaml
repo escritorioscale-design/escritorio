@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: scale-workadventure
+    runtime: docker
+    plan: standard
+    region: virginia
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: workadventure-maps
+      mountPath: /data/maps
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: FALLBACK_LOCALE
+        value: pt-BR
+      - key: ENABLE_CHAT
+        value: "false"
+      - key: ENABLE_CHAT_UPLOAD
+        value: "false"
+      - key: ENABLE_TUTORIAL
+        value: "true"
+      - key: MAX_USERS_FOR_WEBRTC
+        value: "1"
+      - key: ENABLE_TELEMETRY
+        value: "false"
