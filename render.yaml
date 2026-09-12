@@ -13,6 +13,8 @@ services:
       mountPath: /data/maps
       sizeGB: 1
     envVars:
+      - key: PORT
+        value: "10000"
       - key: NODE_ENV
         value: production
       - key: SECRET_KEY

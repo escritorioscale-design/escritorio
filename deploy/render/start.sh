@@ -74,6 +74,8 @@ if [ -z "${LIVEKIT_HOST:-}" ] && [ -n "${LIVEKIT_URL:-}" ]; then
 fi
 
 sed "s/__PORT__/$PORT/g" /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+nginx -t
+echo "Proxy publico configurado em 0.0.0.0:${PORT}."
 mkdir -p "$STORAGE_DIRECTORY"
 chown -R node:node "$STORAGE_DIRECTORY"
 
@@ -101,7 +103,7 @@ start_service "map-storage" gosu node env HTTP_PORT=3002 GRPC_PORT=50053 sh -c "
 start_service "uploader" gosu node env HTTP_PORT=8081 sh -c "cd /usr/src/uploader && exec /usr/src/node_modules/.bin/tsx server.ts"
 start_service "play" gosu node sh -c "cd /usr/src/play && exec /usr/src/node_modules/.bin/tsx src/server.ts"
 start_service "iconserver" env PORT=8082 SERVER_MODE=redirect /usr/local/bin/iconserver
-start_service "nginx" nginx -g "daemon off;"
+start_service "nginx" nginx -g "daemon off; master_process off;"
 
 while true; do
     for pid in $pids; do
